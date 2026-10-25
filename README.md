@@ -14,14 +14,14 @@ Under the hood, Xplorer is built on Tauri v2 and Rust for async disk I/O, couple
 
 ## Features
 
-- **Instant BFS Search** — Searches run live as you type without blocking the UI. Matches in your current folder appear instantly (Level 0), followed by subfolders in breadth-first order with location badges.
-- **Multi-Tab Workspace** — Open multiple tabs, duplicate them, and navigate history independently per tab using standard shortcuts (`Ctrl+T`, `Ctrl+W`, `Ctrl+Tab`).
-- **Native Context Menus** — Unlike web-only file managers that display mock context menus, Xplorer bridges directly into Windows COM (`IContextMenu`) so you get your actual shell integrations: 7-Zip, WinRAR, VS Code, Open with, and Share.
-- **True Drag and Drop** — Drag files directly into external applications (Discord, browsers, editors) or between tabs using native OLE drag support.
-- **Fluent Dark Design** — Designed to feel right at home on Windows 11. Minimal chrome, smooth animations, and no unnecessary widgets.
-- **Virtualized Views** — Switch between Details (List) and Grid views. Both use virtualized rendering to handle folders with tens of thousands of items without dropping frames.
-- **Quick Preview Pane** — Inspect images, video, audio playback, and code or markdown files right in the sidebar without opening external programs.
-- **Recycle Bin & Safe Operations** — Native shell deletion to the Windows Recycle Bin with one-click restore and full undo/redo (`Ctrl+Z` / `Ctrl+Y`) tracking.
+- **Instant BFS Search** - Searches run live as you type without blocking the UI. Matches in your current folder appear instantly (Level 0), followed by subfolders in breadth-first order with location badges.
+- **Multi-Tab Workspace** - Open multiple tabs, duplicate them, and navigate history independently per tab using standard shortcuts (`Ctrl+T`, `Ctrl+W`, `Ctrl+Tab`).
+- **Native Context Menus** - Unlike web-only file managers that display mock context menus, Xplorer bridges directly into Windows COM (`IContextMenu`) so you get your actual shell integrations: 7-Zip, WinRAR, VS Code, Open with, and Share.
+- **True Drag and Drop** - Drag files directly into external applications (Discord, browsers, editors) or between tabs using native OLE drag support.
+- **Fluent Dark Design** - Designed to feel right at home on Windows 11. Minimal chrome, smooth animations, and no unnecessary widgets.
+- **Virtualized Views** - Switch between Details (List) and Grid views. Both use virtualized rendering to handle folders with tens of thousands of items without dropping frames.
+- **Quick Preview Pane** - Inspect images, video, audio playback, and code or markdown files right in the sidebar without opening external programs.
+- **Recycle Bin & Safe Operations** - Native shell deletion to the Windows Recycle Bin with one-click restore and full undo/redo (`Ctrl+Z` / `Ctrl+Y`) tracking.
 
 ---
 
