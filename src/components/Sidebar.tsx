@@ -381,55 +381,71 @@ export default function Sidebar({
 
       {/* This PC + expandable drives list (like Windows Explorer Navigation Pane) */}
       <div className="mt-2 border-t border-[#292929] pt-2">
-        <div className="mx-1.5 mb-0.5 flex items-center">
-          <button
-            type="button"
-            onClick={() => setPcOpen((o) => !o)}
-            className="flex h-7 w-5 shrink-0 items-center justify-center rounded text-neutral-400 hover:bg-[#2a2a2a] hover:text-white"
+        <div
+          role="treeitem"
+          aria-expanded={pcOpen}
+          tabIndex={0}
+          onClick={() => onNavigate("shell:ThisPC")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onNavigate("shell:ThisPC");
+            } else if (e.key === "ArrowRight" && !pcOpen) {
+              e.preventDefault();
+              setPcOpen(true);
+            } else if (e.key === "ArrowLeft" && pcOpen) {
+              e.preventDefault();
+              setPcOpen(false);
+            }
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onContextMenu(e, [
+              {
+                items: [
+                  { label: "Open", primary: true, action: () => onNavigate("shell:ThisPC") },
+                  {
+                    label: "Open in new tab",
+                    icon: FolderPlus,
+                    action: () => onOpenNewTab("shell:ThisPC"),
+                  },
+                ],
+              },
+            ]);
+          }}
+          className={`group mx-1.5 mb-0.5 flex w-[calc(100%-0.75rem)] cursor-pointer items-center gap-1.5 rounded-md px-1 py-1.5 text-left text-[12.5px] transition-colors select-none hover:bg-[#2a2a2a] ${
+            active("shell:ThisPC") ? "bg-[#2d2d2d] text-white" : "text-neutral-200"
+          }`}
+        >
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPcOpen((o) => !o);
+            }}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-400 group-hover:text-neutral-200 hover:text-white"
             data-tooltip={pcOpen ? "Collapse This PC" : "Expand This PC"}
             aria-label={pcOpen ? "Collapse This PC" : "Expand This PC"}
           >
             {pcOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate("shell:ThisPC")}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onContextMenu(e, [
-                {
-                  items: [
-                    { label: "Open", primary: true, action: () => onNavigate("shell:ThisPC") },
-                    {
-                      label: "Open in new tab",
-                      icon: FolderPlus,
-                      action: () => onOpenNewTab("shell:ThisPC"),
-                    },
-                  ],
-                },
-              ]);
+          </span>
+          <EntryIcon
+            entry={{
+              name: "This PC",
+              path: "shell:ThisPC",
+              is_dir: true,
+              is_hidden: false,
+              size: "",
+              item_type: "Folder",
+              modified: "",
             }}
-            className={`relative flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-[#2a2a2a] ${
-              active("shell:ThisPC") ? "bg-[#2d2d2d] text-white" : "text-neutral-200"
-            }`}
-          >
-            <EntryIcon
-              entry={{
-                name: "This PC",
-                path: "shell:ThisPC",
-                is_dir: true,
-                is_hidden: false,
-                size: "",
-                item_type: "Folder",
-                modified: "",
-              }}
-              size={16}
-              perPath
-              className="shrink-0"
-            />
-            <span className="truncate">This PC</span>
-          </button>
+            size={16}
+            perPath
+            className="shrink-0"
+          />
+          <span className="truncate">This PC</span>
         </div>
 
         {pcOpen &&
