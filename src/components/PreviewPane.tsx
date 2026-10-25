@@ -21,7 +21,6 @@ import {
   Maximize2,
   Music,
   PanelRight,
-  Share2,
   Video,
   X,
 } from "lucide-react";
@@ -56,25 +55,6 @@ export default function PreviewPane({
   const [imgDimensions, setImgDimensions] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [shared, setShared] = useState(false);
-
-  const shareFile = async () => {
-    if (!single) return;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: single.name,
-          text: single.path,
-        });
-        return;
-      } catch {}
-    }
-    try {
-      await navigator.clipboard.writeText(single.path);
-      setShared(true);
-      setTimeout(() => setShared(false), 1500);
-    } catch {}
-  };
 
   const ext = single && !single.is_dir
     ? single.name.slice(single.name.lastIndexOf(".") + 1).toLowerCase()
@@ -210,16 +190,6 @@ export default function PreviewPane({
                 <p className="truncate text-[11.5px] text-neutral-400">{single.item_type}</p>
               </div>
             </div>
-
-            {/* Share button */}
-            <button
-              type="button"
-              onClick={shareFile}
-              className="flex items-center gap-1.5 rounded bg-[#2b2b2b] hover:bg-[#353535] px-3 py-1.5 text-[12px] font-medium text-neutral-200 border border-[#383838] transition-colors w-fit"
-            >
-              <Share2 size={13} />
-              <span>{shared ? "Path Copied!" : "Share"}</span>
-            </button>
 
             {/* Media/Text Viewer */}
             {IMAGE_EXTS.has(ext) ? (
