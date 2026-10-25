@@ -209,10 +209,10 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
         if (!selected.has(e.path)) onSelect(e.path, false);
         onContextMenu(ev, e);
       }}
-      style={{ gridTemplateColumns: ctx.colTemplate, width: "max-content" }}
+      style={{ gridTemplateColumns: ctx.colTemplate, minWidth: "100%", width: "max-content" }}
       className={`grid cursor-default items-center gap-3 rounded-[4px] px-3 ${
-        compact ? "py-0.5" : "py-1"
-      } text-[12.5px] transition-colors ${
+        compact ? "py-1" : "py-1.5"
+      } min-h-[30px] text-[12.5px] transition-colors ${
         isSel
           ? "bg-[#383838] text-white ring-1 ring-inset ring-[#505050]"
           : "text-neutral-200 hover:bg-[#2a2a2a]"
@@ -220,22 +220,22 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
         dragOverPath === e.path ? "bg-[#323232] ring-2 ring-[#0078d4]" : ""
       }`}
     >
-      <span className="flex items-center gap-2.5 overflow-hidden min-w-0">
+      <span className="flex items-center gap-2.5 overflow-hidden min-w-0 py-0.5">
         <EntryIcon entry={e} size={Math.round(18 * Math.max(0.85, zoom))} className="shrink-0" />
         {rename(e) ?? (
-          <span className="truncate flex items-baseline gap-1.5 min-w-0">
-            <span className="truncate">{e.name}</span>
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden leading-normal">
+            <span className="truncate min-w-0 text-[12.5px] text-neutral-200">{e.name}</span>
             {relFolder && (
-              <span className="truncate text-[11px] text-neutral-400 opacity-70 font-normal shrink-0">
+              <span className="truncate text-[11px] text-neutral-400/80 font-normal shrink-0">
                 in {relFolder}
               </span>
             )}
-          </span>
+          </div>
         )}
       </span>
-      <span className="truncate text-neutral-400">{e.modified}</span>
-      <span className="truncate text-neutral-400">{e.item_type}</span>
-      <span className="truncate text-neutral-400">{e.size}</span>
+      <span className="truncate text-neutral-400 py-0.5 leading-normal">{e.modified}</span>
+      <span className="truncate text-neutral-400 py-0.5 leading-normal">{e.item_type}</span>
+      <span className="truncate text-neutral-400 py-0.5 leading-normal">{e.size}</span>
     </div>
   );
 }, rowEqual);
@@ -330,7 +330,7 @@ const GridTile = memo(function GridTile({ e, ctx }: { e: FsEntry; ctx: RowCtx })
       {rename(e) ?? (
         <div className="flex flex-col items-center w-full min-w-0 px-0.5">
           <span
-            className="line-clamp-2 w-full break-words text-center leading-[1.25] text-neutral-200"
+            className="line-clamp-2 w-full break-words text-center leading-[1.35] py-0.5 text-neutral-200"
             style={{ fontSize: Math.round(12 * Math.min(1.4, Math.max(0.9, zoom))) }}
             data-tooltip={e.name}
             data-tooltip-truncated="true"

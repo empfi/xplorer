@@ -317,7 +317,7 @@ export default function ThisPCView({
         <EntryIcon entry={e} size={Math.round(40 * zoom)} perPath className="shrink-0" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span
-            className="truncate text-[13px] text-neutral-200"
+            className="truncate text-[13px] text-neutral-200 py-0.5 leading-normal"
             data-tooltip={e.name}
             data-tooltip-truncated="true"
           >

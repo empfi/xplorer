@@ -145,7 +145,6 @@ export default function TabBar({
                   /* ignore */
                 }
               }}
-              data-tooltip={t.path}
               className={`group flex h-full max-w-[235px] min-w-[120px] shrink cursor-default items-center gap-2 rounded-t-lg px-3 text-[12.5px] transition-colors ${
                 isActive
                   ? "bg-[#191919] text-white"
@@ -172,7 +171,13 @@ export default function TabBar({
                   className="shrink-0"
                 />
               )}
-              <span className="min-w-0 flex-1 truncate">{label}</span>
+              <span
+                className="min-w-0 flex-1 truncate py-0.5 leading-normal"
+                data-tooltip={label}
+                data-tooltip-truncated="true"
+              >
+                {label}
+              </span>
               <button
                 type="button"
                 onClick={(e) => {

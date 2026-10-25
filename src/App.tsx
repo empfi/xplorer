@@ -545,6 +545,9 @@ export default function App() {
       if (!active) return;
       anchorRef.current = null;
       edgeRef.current = null;
+      setSearchQuery("");
+      setSearchResults(null);
+      setIsSearchingSubfolders(false);
       if (target.startsWith("upnp::")) {
         api.openPath(target.slice("upnp::".length)).catch((err) => showToast(String(err)));
         return;
@@ -763,26 +766,41 @@ export default function App() {
         api.openPath(e.path.slice("upnp::".length)).catch((err) => showToast(String(err)));
         return;
       }
-      if (e.is_dir) activeNavigate(e.path);
-      else api.openPath(e.path).catch((err) => showToast(String(err)));
+      if (e.is_dir) {
+        setSearchQuery("");
+        setSearchResults(null);
+        setIsSearchingSubfolders(false);
+        activeNavigate(e.path);
+      } else {
+        api.openPath(e.path).catch((err) => showToast(String(err)));
+      }
     },
     [active, activeNavigate, showToast],
   );
 
   const goBack = useCallback(() => {
     if (!active || active.hIndex === 0) return;
+    setSearchQuery("");
+    setSearchResults(null);
+    setIsSearchingSubfolders(false);
     const i = active.hIndex - 1;
     setTab(active.id, { hIndex: i, path: active.history[i], selected: new Set() });
   }, [active, setTab]);
 
   const goForward = useCallback(() => {
     if (!active || active.hIndex >= active.history.length - 1) return;
+    setSearchQuery("");
+    setSearchResults(null);
+    setIsSearchingSubfolders(false);
     const i = active.hIndex + 1;
     setTab(active.id, { hIndex: i, path: active.history[i], selected: new Set() });
   }, [active, setTab]);
 
   const goUp = useCallback(() => {
     if (!active) return;
+    setSearchQuery("");
+    setSearchResults(null);
+    setIsSearchingSubfolders(false);
     if (/^\\\\[^\\]+$/.test(active.path)) {
       activeNavigate("shell:ThisPC");
       return;
@@ -2189,6 +2207,15 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (menu) return;
       const tag = (e.target as HTMLElement)?.tagName;
+      if (e.key === "Escape") {
+        if (searchQuery) {
+          e.preventDefault();
+          setSearchQuery("");
+          setSearchResults(null);
+          setIsSearchingSubfolders(false);
+          return;
+        }
+      }
       if (tag === "INPUT" || tag === "TEXTAREA") {
         if (e.key !== "Escape") return;
       }
@@ -2569,7 +2596,12 @@ export default function App() {
           loading: t.loading || t.bgLoading,
         }))}
         activeId={active.id}
-        onSelect={setActiveId}
+        onSelect={(id) => {
+          setSearchQuery("");
+          setSearchResults(null);
+          setIsSearchingSubfolders(false);
+          setActiveId(id);
+        }}
         onClose={closeTab}
         onCloseOthers={closeOtherTabs}
         onDuplicate={(p) => openTab(p)}

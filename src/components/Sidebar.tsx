@@ -461,13 +461,13 @@ export default function Sidebar({
                 <button
                   type="button"
                   onClick={() => onNavigate(d.path)}
-                  data-tooltip={`${label}${d.total ? ` — ${d.free} free of ${d.total}` : ""}`}
+                  data-tooltip={`${label}${d.total ? ` - ${d.free} free of ${d.total}` : ""}`}
                   className={`${itemCls(d.path, true)} ${
                     isOver ? "ring-2 ring-[#0078d4]" : ""
                   }`}
                 >
                   <EntryIcon entry={entry} size={16} perPath className="shrink-0" />
-                  <span className="truncate">{label}</span>
+                  <span className="min-w-0 flex-1 truncate py-0.5 leading-normal">{label}</span>
                 </button>
               </div>
             );

@@ -85,6 +85,7 @@ export default function Topbar({
   const [draft, setDraft] = useState(path);
   const addrInputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const breadcrumbsRef = useRef<HTMLDivElement>(null);
   const [dropSeg, setDropSeg] = useState<string | null>(null);
 
   const segAccepts = (ev: React.DragEvent) => {
@@ -109,6 +110,14 @@ export default function Topbar({
 
   useEffect(() => {
     setDraft(path);
+    if (breadcrumbsRef.current) {
+      const el = breadcrumbsRef.current;
+      if (el.scrollWidth > el.clientWidth) {
+        el.scrollLeft = el.scrollWidth - el.clientWidth;
+      } else {
+        el.scrollLeft = 0;
+      }
+    }
   }, [path]);
 
   useEffect(() => {
@@ -198,7 +207,8 @@ export default function Topbar({
           />
         ) : (
           <div
-            className="allow-scroll flex h-full w-full items-center gap-0.5 overflow-x-auto px-2"
+            ref={breadcrumbsRef}
+            className="flex h-full w-full items-center gap-0.5 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             onClick={(e) => {
               if (e.target === e.currentTarget) setEditing(true);
             }}
@@ -222,7 +232,7 @@ export default function Topbar({
                     }}
                     onDragLeave={() => setDropSeg((p) => (p === seg.path ? null : p))}
                     onDrop={segDrop(seg.path)}
-                    className={`flex items-center justify-center rounded px-1.5 py-0.5 text-[12.5px] transition-colors ${
+                    className={`flex items-center justify-center rounded px-1.5 py-0.5 min-h-[24px] leading-normal text-[12.5px] transition-colors ${
                       isLast
                         ? "text-white hover:bg-[#303030]"
                         : "text-neutral-300 hover:bg-[#303030] hover:text-white"
@@ -234,7 +244,7 @@ export default function Topbar({
               );
             })}
             <span
-              className="h-full min-w-8 flex-1 cursor-text"
+              className="h-full min-w-4 flex-1 cursor-text"
               onClick={() => setEditing(true)}
             />
           </div>
