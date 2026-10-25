@@ -28,14 +28,23 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
     api
       .isDefaultFileManager()
       .then(setIsDefault)
-      .catch(() => {});
+      .catch((err) => console.error("isDefaultFileManager error:", err));
     api
       .isWinEInterceptionEnabled()
       .then(setWinEEnabled)
-      .catch(() => {});
+      .catch((err) => console.error("isWinEInterceptionEnabled error:", err));
   }, [open]);
 
   if (!open) return null;
@@ -79,7 +88,7 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4 select-none animate-in fade-in duration-150"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4 select-none"
       onClick={onClose}
     >
       <div

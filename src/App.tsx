@@ -2863,7 +2863,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex items-center gap-0.5">
+        <div className="ml-auto flex items-center gap-0.5">
           <button
             type="button"
             onClick={() => setTab(active.id, { view: "list", zoom: 1.0 })}
@@ -2889,6 +2889,16 @@ export default function App() {
             }`}
           >
             <LayoutGrid size={13} />
+          </button>
+          <div className="mx-1 h-3.5 w-[1px] bg-[#333]" />
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            data-tooltip="Settings & Integration"
+            aria-label="Settings"
+            className="flex h-5 w-6 items-center justify-center rounded text-neutral-400 hover:bg-[#282828] hover:text-white transition-colors"
+          >
+            <Settings size={13} />
           </button>
         </div>
       </div>
