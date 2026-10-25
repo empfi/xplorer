@@ -2207,6 +2207,17 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (menu) return;
       const tag = (e.target as HTMLElement)?.tagName;
+      if (e.key === "F3" || (e.ctrlKey && (e.key === "f" || e.key === "F"))) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSearchQuery("");
+        requestAnimationFrame(() => {
+          const input = document.querySelector<HTMLInputElement>("[data-fast-search]");
+          input?.focus();
+          input?.select();
+        });
+        return;
+      }
       if (e.key === "Escape") {
         if (searchQuery) {
           e.preventDefault();
@@ -2255,12 +2266,6 @@ export default function App() {
       } else if (e.key === "F5" || (e.ctrlKey && (e.key === "r" || e.key === "R"))) {
         e.preventDefault();
         refresh();
-      } else if (e.ctrlKey && (e.key === "f" || e.key === "F")) {
-        e.preventDefault();
-        setSearchQuery("");
-        requestAnimationFrame(() => {
-          document.querySelector<HTMLInputElement>("[data-fast-search]")?.focus();
-        });
       } else if (e.altKey && (e.key === "p" || e.key === "P")) {
         e.preventDefault();
         if (e.shiftKey) toggleDetails();
