@@ -577,16 +577,17 @@ export default function App() {
   );
 
   const openTab = useCallback(
-    (path: string) => {
-      if (path.startsWith("upnp::")) {
-        api.openPath(path.slice("upnp::".length)).catch((err) => showToast(String(err)));
+    (path?: string) => {
+      const target = path || downloadsPath || getInitialPath();
+      if (target.startsWith("upnp::")) {
+        api.openPath(target.slice("upnp::".length)).catch((err) => showToast(String(err)));
         return;
       }
-      const t = newTab(path);
+      const t = newTab(target);
       setTabs((prev) => [...prev, t]);
       setActiveId(t.id);
     },
-    [showToast],
+    [downloadsPath, showToast],
   );
 
   const closeTab = useCallback((id: number) => {
@@ -594,14 +595,14 @@ export default function App() {
       const idx = prev.findIndex((t) => t.id === id);
       const next = prev.filter((t) => t.id !== id);
       if (!next.length) {
-        const fresh = newTab();
+        const fresh = newTab(downloadsPath || getInitialPath());
         setActiveId(fresh.id);
         return [fresh];
       }
       setActiveId((cur) => (cur === id ? next[Math.max(0, idx - 1)].id : cur));
       return next;
     });
-  }, []);
+  }, [downloadsPath]);
 
   const closeOtherTabs = useCallback((keepId: number) => {
     setTabs((prev) => {
@@ -613,20 +614,23 @@ export default function App() {
 
   useEffect(() => {
     api
-      .getQuickAccess()
-      .then((links) => {
-        const target = links.find((l) => l.name === "Downloads") ?? links[0];
-        if (target && active)
-          setTab(active.id, {
-            path: target.path,
-            history: [target.path],
+      .getDownloadsPath()
+      .then((dp) => {
+        if (
+          dp &&
+          activeRef.current &&
+          (activeRef.current.path === "C:\\" || activeRef.current.path === "shell:ThisPC")
+        ) {
+          setTab(activeRef.current.id, {
+            path: dp,
+            history: [dp],
             hIndex: 0,
             selected: new Set(),
           });
+        }
       })
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setTab]);
 
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
@@ -705,12 +709,12 @@ export default function App() {
     });
   }, [openTab]);
 
-  // Global Win + E shortcut redirection: focus and open This PC
+  // Global Win + E shortcut redirection: focus and open Downloads
   useEffect(() => {
     return onWinEPressed(() => {
-      openTab("shell:ThisPC");
+      openTab(downloadsPath || getInitialPath());
     });
-  }, [openTab]);
+  }, [downloadsPath, openTab]);
 
   useEffect(() => {
     if (!isRecycle || !active) return;

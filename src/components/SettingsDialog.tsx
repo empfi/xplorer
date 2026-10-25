@@ -1,15 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import {
-  Check,
   CheckCircle2,
-  ExternalLink,
-  FolderSync,
-  Keyboard,
-  Layers,
   Monitor,
   Settings,
-  ShieldCheck,
   X,
   Zap,
 } from "lucide-react";
@@ -174,7 +168,7 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
                   </div>
                   <p className="text-[11.5px] text-neutral-400 leading-relaxed">
                     Pressing <kbd className="rounded bg-[#2a2a2a] px-1 py-0.5 font-mono text-neutral-200 text-[10.5px]">Win+E</kbd> brings
-                    Xplorer to the front and opens a new tab instead of native Explorer.
+                    Xplorer to the front and opens a new tab in Downloads instead of native Explorer.
                   </p>
                 </div>
 
@@ -192,57 +186,6 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
                     }`}
                   />
                 </button>
-              </div>
-            </div>
-
-            {/* Single Instance Window Card */}
-            <div className="flex items-center justify-between rounded-lg border border-[#333] bg-[#191919] p-3.5">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <Layers size={14} className="text-neutral-400" />
-                  <span className="font-semibold text-white">Single-Instance Window</span>
-                  <span className="rounded bg-[#2a2a2a] px-2 py-0.5 text-[10.5px] text-emerald-400 font-medium">
-                    Always On
-                  </span>
-                </div>
-                <p className="text-[11.5px] text-neutral-400 leading-relaxed">
-                  External folders open directly as new tabs inside your current Xplorer window,
-                  avoiding clutter.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Shortcuts Section */}
-          <div className="flex flex-col gap-2.5 pt-2 border-t border-[#2e2e2e]">
-            <div className="flex items-center gap-2 text-white font-semibold text-[13px]">
-              <Keyboard size={15} className="text-sky-400" />
-              <span>Key Shortcuts</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[11.5px]">
-              <div className="flex items-center justify-between rounded bg-[#191919] p-2 border border-[#2a2a2a]">
-                <span className="text-neutral-300">New tab</span>
-                <kbd className="font-mono text-neutral-400">Ctrl+T</kbd>
-              </div>
-              <div className="flex items-center justify-between rounded bg-[#191919] p-2 border border-[#2a2a2a]">
-                <span className="text-neutral-300">Close tab</span>
-                <kbd className="font-mono text-neutral-400">Ctrl+W</kbd>
-              </div>
-              <div className="flex items-center justify-between rounded bg-[#191919] p-2 border border-[#2a2a2a]">
-                <span className="text-neutral-300">Toggle Details pane</span>
-                <kbd className="font-mono text-neutral-400">Alt+P</kbd>
-              </div>
-              <div className="flex items-center justify-between rounded bg-[#191919] p-2 border border-[#2a2a2a]">
-                <span className="text-neutral-300">Focus Address bar</span>
-                <kbd className="font-mono text-neutral-400">Alt+D / F4</kbd>
-              </div>
-              <div className="flex items-center justify-between rounded bg-[#191919] p-2 border border-[#2a2a2a]">
-                <span className="text-neutral-300">Search folder</span>
-                <kbd className="font-mono text-neutral-400">Ctrl+F / F3</kbd>
-              </div>
-              <div className="flex items-center justify-between rounded bg-[#191919] p-2 border border-[#2a2a2a]">
-                <span className="text-neutral-300">Rename selected</span>
-                <kbd className="font-mono text-neutral-400">F2</kbd>
               </div>
             </div>
           </div>
