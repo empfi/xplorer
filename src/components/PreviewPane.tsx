@@ -20,6 +20,7 @@ import {
   Loader2,
   Maximize2,
   Music,
+  Share2,
   Video,
   X,
 } from "lucide-react";
@@ -58,6 +59,25 @@ export default function PreviewPane({
   const [imgDimensions, setImgDimensions] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
+
+  const shareFile = async () => {
+    if (!single) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: single.name,
+          text: single.path,
+        });
+        return;
+      } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(single.path);
+      setShared(true);
+      setTimeout(() => setShared(false), 1500);
+    } catch {}
+  };
 
   const ext = single && !single.is_dir
     ? single.name.slice(single.name.lastIndexOf(".") + 1).toLowerCase()
@@ -217,6 +237,16 @@ export default function PreviewPane({
               </div>
             </div>
 
+            {/* Share button */}
+            <button
+              type="button"
+              onClick={shareFile}
+              className="flex items-center gap-1.5 rounded bg-[#2b2b2b] hover:bg-[#353535] px-3 py-1.5 text-[12px] font-medium text-neutral-200 border border-[#383838] transition-colors w-fit"
+            >
+              <Share2 size={13} />
+              <span>{shared ? "Path Copied!" : "Share"}</span>
+            </button>
+
             {/* Media/Text Viewer */}
             {IMAGE_EXTS.has(ext) ? (
               <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-[#303030] bg-[#141414] p-2">
@@ -310,16 +340,30 @@ export default function PreviewPane({
             ) : (
               <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] p-8 text-center text-neutral-400">
                 <File size={36} strokeWidth={1.5} className="text-neutral-500" />
-                <p className="text-[12px]">No preview available for this file type.</p>
-                <p className="text-[11px] text-neutral-500">Switch to the Details tab for metadata.</p>
+                <p className="text-[12px]">No live preview available.</p>
               </div>
             )}
+
+            {/* Details Section right below the preview in the same tab */}
+            <div className="border-t border-[#2e2e2e] pt-3">
+              <DetailsList
+                single={single}
+                meta={meta}
+                copyPath={copyPath}
+                copied={copied}
+                imgDimensions={imgDimensions}
+              />
+            </div>
           </div>
         ) : (
           /* DETAILS MODE */
           <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 border-b border-[#2e2e2e] pb-3">
-              <EntryIcon entry={single} size={36} />
+            <div className="flex h-36 w-full items-center justify-center rounded-lg bg-[#252525] border border-[#303030]">
+              <EntryIcon entry={single} size={64} />
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <EntryIcon entry={single} size={28} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold text-white" title={single.name}>
                   {single.name}
@@ -330,94 +374,137 @@ export default function PreviewPane({
               </div>
             </div>
 
-            <div className="flex flex-col gap-3">
-              {/* File size */}
-              <div>
-                <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
-                  Size
-                </span>
-                <p className="text-[12.5px] text-neutral-200">
-                  {meta?.size_formatted || single.size || "-"}
-                  {meta && meta.size_bytes > 0 && (
-                    <span className="ml-1 text-[11px] text-neutral-400">
-                      ({meta.size_bytes.toLocaleString()} bytes)
-                    </span>
-                  )}
-                </p>
-              </div>
+            <button
+              type="button"
+              onClick={shareFile}
+              className="flex items-center gap-1.5 rounded bg-[#2b2b2b] hover:bg-[#353535] px-3 py-1.5 text-[12px] font-medium text-neutral-200 border border-[#383838] transition-colors w-fit"
+            >
+              <Share2 size={13} />
+              <span>{shared ? "Path Copied!" : "Share"}</span>
+            </button>
 
-              {/* Full path */}
-              <div>
-                <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
-                  Location
-                </span>
-                <div className="mt-1 flex items-center justify-between gap-2 rounded bg-[#232323] p-1.5 text-[11.5px] text-neutral-300">
-                  <span className="truncate" title={single.path}>
-                    {single.path}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={copyPath}
-                    className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-[#333] hover:text-white"
-                    title="Copy full path"
-                  >
-                    {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                  </button>
-                </div>
-              </div>
+            <div className="border-t border-[#2e2e2e] pt-3">
+              <DetailsList
+                single={single}
+                meta={meta}
+                copyPath={copyPath}
+                copied={copied}
+                imgDimensions={imgDimensions}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-              {/* Dates */}
-              <div className="flex flex-col gap-2 pt-1 border-t border-[#2e2e2e]">
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
-                    Date Modified
-                  </span>
-                  <p className="text-[12px] text-neutral-200">
-                    {meta?.modified || single.modified || "-"}
-                  </p>
-                </div>
-                {meta && (
-                  <>
-                    <div>
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
-                        Date Created
-                      </span>
-                      <p className="text-[12px] text-neutral-200">{meta.created}</p>
-                    </div>
-                    <div>
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
-                        Last Accessed
-                      </span>
-                      <p className="text-[12px] text-neutral-200">{meta.accessed}</p>
-                    </div>
-                  </>
-                )}
-              </div>
+function DetailsList({
+  single,
+  meta,
+  copyPath,
+  copied,
+  imgDimensions,
+}: {
+  single: FsEntry;
+  meta: FileMetadata | null;
+  copyPath: () => void;
+  copied: boolean;
+  imgDimensions: string | null;
+}) {
+  const dirPath = single.path.substring(0, single.path.lastIndexOf("\\")) || single.path;
 
-              {/* Attributes */}
-              {meta && (
-                <div className="pt-1 border-t border-[#2e2e2e]">
-                  <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
-                    Attributes
-                  </span>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
-                    <span
-                      className={`rounded px-2 py-0.5 ${
-                        meta.is_readonly ? "bg-amber-950/60 text-amber-300 border border-amber-800" : "bg-[#252525] text-neutral-400"
-                      }`}
-                    >
-                      {meta.is_readonly ? "Read-only" : "Writable"}
-                    </span>
-                    <span
-                      className={`rounded px-2 py-0.5 ${
-                        meta.is_hidden ? "bg-purple-950/60 text-purple-300 border border-purple-800" : "bg-[#252525] text-neutral-400"
-                      }`}
-                    >
-                      {meta.is_hidden ? "Hidden" : "Visible"}
-                    </span>
-                  </div>
-                </div>
-              )}
+  return (
+    <div className="flex flex-col gap-3">
+      <h4 className="text-[12.5px] font-semibold text-white tracking-wide">Details</h4>
+
+      <div className="flex flex-col gap-2.5 text-[12px]">
+        {/* Type */}
+        <div className="grid grid-cols-[90px_1fr] items-start gap-2">
+          <span className="text-neutral-400">Type</span>
+          <span className="text-neutral-200 text-right truncate">
+            {meta?.item_type || single.item_type || "File"}
+          </span>
+        </div>
+
+        {/* Size */}
+        <div className="grid grid-cols-[90px_1fr] items-start gap-2">
+          <span className="text-neutral-400">Size</span>
+          <span className="text-neutral-200 text-right">
+            {meta?.size_formatted || single.size || "-"}
+            {meta && meta.size_bytes > 0 && (
+              <span className="block text-[11px] text-neutral-400 font-mono">
+                {meta.size_bytes.toLocaleString()} bytes
+              </span>
+            )}
+          </span>
+        </div>
+
+        {/* File location */}
+        <div className="grid grid-cols-[90px_1fr] items-start gap-2">
+          <span className="text-neutral-400">File location</span>
+          <div className="flex items-center justify-end gap-1.5 min-w-0">
+            <span className="truncate text-neutral-200 text-right text-[11.5px]" title={dirPath}>
+              {dirPath}
+            </span>
+            <button
+              type="button"
+              onClick={copyPath}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-400 hover:bg-[#333] hover:text-white transition-colors"
+              title="Copy path"
+            >
+              {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Date modified */}
+        <div className="grid grid-cols-[90px_1fr] items-start gap-2">
+          <span className="text-neutral-400">Date modified</span>
+          <span className="text-neutral-200 text-right">
+            {meta?.modified || single.modified || "-"}
+          </span>
+        </div>
+
+        {/* Date created */}
+        {meta?.created && (
+          <div className="grid grid-cols-[90px_1fr] items-start gap-2">
+            <span className="text-neutral-400">Date created</span>
+            <span className="text-neutral-200 text-right">{meta.created}</span>
+          </div>
+        )}
+
+        {/* Image Dimensions if available */}
+        {imgDimensions && (
+          <div className="grid grid-cols-[90px_1fr] items-start gap-2">
+            <span className="text-neutral-400">Dimensions</span>
+            <span className="text-neutral-200 text-right font-mono">{imgDimensions}</span>
+          </div>
+        )}
+
+        {/* Attributes */}
+        {meta && (
+          <div className="grid grid-cols-[90px_1fr] items-center gap-2 pt-1 border-t border-[#2e2e2e]">
+            <span className="text-neutral-400">Attributes</span>
+            <div className="flex justify-end gap-1.5 text-[11px]">
+              <span
+                className={`rounded px-2 py-0.5 ${
+                  meta.is_readonly
+                    ? "bg-amber-950/60 text-amber-300 border border-amber-800"
+                    : "bg-[#252525] text-neutral-400"
+                }`}
+              >
+                {meta.is_readonly ? "Read-only" : "Writable"}
+              </span>
+              <span
+                className={`rounded px-2 py-0.5 ${
+                  meta.is_hidden
+                    ? "bg-purple-950/60 text-purple-300 border border-purple-800"
+                    : "bg-[#252525] text-neutral-400"
+                }`}
+              >
+                {meta.is_hidden ? "Hidden" : "Visible"}
+              </span>
             </div>
           </div>
         )}
