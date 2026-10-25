@@ -4,9 +4,18 @@ mod commands;
 
 use std::sync::Mutex;
 
-use commands::{clipboard, context_menu, fs_ops, shell_new, system, watcher};
+use commands::{
+    clipboard, context_menu, default_manager, fs_ops, hotkey, shell_new, single_instance, system,
+    watcher,
+};
 
 fn main() {
+    let cli_target = single_instance::parse_cli_target_path();
+
+    if single_instance::forward_to_existing_instance(cli_target.as_deref()) {
+        std::process::exit(0);
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_drag::init())
         .setup(|app| {
@@ -16,6 +25,8 @@ fn main() {
                 let _ = std::fs::write(&temp_icon, default_icon_bytes);
             }
             system::spawn_drive_watcher(app.handle().clone());
+            single_instance::start_single_instance_listener(app.handle().clone());
+            hotkey::init_hotkey_listener(app.handle().clone());
             Ok(())
         })
         .manage(Mutex::new(clipboard::Clipboard::default()))
@@ -23,6 +34,7 @@ fn main() {
         .manage(context_menu::ContextMenuState::default())
         .manage(commands::icons::IconCache::default())
         .manage(watcher::FolderWatcherState::default())
+        .manage(single_instance::InitialCliPath(Mutex::new(cli_target)))
         .invoke_handler(tauri::generate_handler![
             fs_ops::list_dir,
             fs_ops::rename_item,
@@ -73,6 +85,12 @@ fn main() {
             commands::icons::get_entry_icon,
             commands::icons::get_entry_icons_batch,
             watcher::watch_folder,
+            single_instance::get_initial_launch_path,
+            default_manager::is_default_file_manager,
+            default_manager::set_as_default_file_manager,
+            default_manager::unset_as_default_file_manager,
+            hotkey::is_win_e_interception_enabled,
+            hotkey::set_win_e_interception_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

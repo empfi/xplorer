@@ -1,8 +1,11 @@
 pub mod clipboard;
 pub mod context_menu;
+pub mod default_manager;
 pub mod fs_ops;
+pub mod hotkey;
 pub mod icons;
 pub mod recycle;
 pub mod shell_new;
+pub mod single_instance;
 pub mod system;
 pub mod watcher;

@@ -72,6 +72,44 @@ export function onFolderChanged(cb: (path: string) => void): () => void {
 }
 
 /**
+ * Subscribe to external path opening (e.g. from second instance or default file manager launch).
+ */
+export function onExternalOpenPath(cb: (path: string) => void): () => void {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return () => {};
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+  listen<string>("open-path-external", (ev) => cb(ev.payload))
+    .then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    })
+    .catch(() => {});
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
+}
+
+/**
+ * Subscribe to Win+E global hotkey interception.
+ */
+export function onWinEPressed(cb: () => void): () => void {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return () => {};
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+  listen<void>("win-e-pressed", () => cb())
+    .then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    })
+    .catch(() => {});
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
+}
+
+/**
  * Subscribe to streaming copy/move progress updates (speed, percentage, remaining bytes).
  */
 export function onTransferProgress(cb: (progress: TransferProgress) => void): () => void {
@@ -173,4 +211,11 @@ export const api = {
     invoke<void>("show_properties", { paths, page: page ?? null }),
   createShortcut: (paths: string[], destDir?: string) =>
     invoke<string[]>("create_shortcut", { paths, destDir: destDir ?? null }),
+  getInitialLaunchPath: () => invoke<string | null>("get_initial_launch_path"),
+  isDefaultFileManager: () => invoke<boolean>("is_default_file_manager"),
+  setAsDefaultFileManager: () => invoke<void>("set_as_default_file_manager"),
+  unsetAsDefaultFileManager: () => invoke<void>("unset_as_default_file_manager"),
+  isWinEInterceptionEnabled: () => invoke<boolean>("is_win_e_interception_enabled"),
+  setWinEInterceptionEnabled: (enabled: boolean) =>
+    invoke<void>("set_win_e_interception_enabled", { enabled }),
 };

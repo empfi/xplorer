@@ -10,7 +10,14 @@ import type {
   SortKey,
   TransferProgress,
 } from "./types";
-import { api, onDrivesChanged, onFolderChanged, onTransferProgress } from "./api";
+import {
+  api,
+  onDrivesChanged,
+  onExternalOpenPath,
+  onFolderChanged,
+  onTransferProgress,
+  onWinEPressed,
+} from "./api";
 import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "./components/Sidebar";
 import ThisPCView from "./components/ThisPCView";
@@ -21,6 +28,7 @@ import TabBar from "./components/TabBar";
 import ContextMenu, { type MenuGroup, type MenuItem } from "./components/ContextMenu";
 import InstantTooltip from "./components/InstantTooltip";
 import PreviewPane from "./components/PreviewPane";
+import SettingsDialog from "./components/SettingsDialog";
 import TransferDialog from "./components/TransferDialog";
 import {
   AppWindow,
@@ -252,6 +260,7 @@ export default function App() {
     { label: "Folder", ext: "", kind: { type: "empty" } },
     { label: "Text Document", ext: "txt", kind: { type: "empty" } },
   ]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Live background transfer tracking for non-intrusive status bar display
   const [bgTransfer, setBgTransfer] = useState<TransferProgress | null>(null);
@@ -661,6 +670,47 @@ export default function App() {
       }),
     [],
   );
+
+  // Check if Xplorer was launched with a folder/drive path argument
+  useEffect(() => {
+    api
+      .getInitialLaunchPath()
+      .then((initPath) => {
+        if (initPath) {
+          setTabs((prev) => {
+            if (prev.length === 1) {
+              return [
+                {
+                  ...prev[0],
+                  path: initPath,
+                  history: [initPath],
+                  hIndex: 0,
+                  selected: new Set<string>(),
+                },
+              ];
+            }
+            return prev;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Single-Instance Window: open external paths as a new tab
+  useEffect(() => {
+    return onExternalOpenPath((extPath) => {
+      if (extPath) {
+        openTab(extPath);
+      }
+    });
+  }, [openTab]);
+
+  // Global Win + E shortcut redirection: focus and open This PC
+  useEffect(() => {
+    return onWinEPressed(() => {
+      openTab("shell:ThisPC");
+    });
+  }, [openTab]);
 
   useEffect(() => {
     if (!isRecycle || !active) return;
@@ -2677,6 +2727,7 @@ export default function App() {
           menuReqIdRef.current++;
           setMenu({ x, y, groups });
         }}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -2852,6 +2903,12 @@ export default function App() {
       )}
 
       <InstantTooltip />
+
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        showToast={showToast}
+      />
 
       {toast && (
         <div className="fixed bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-[#3a3a3a] bg-[#262626] px-4 py-1.5 text-[12.5px] text-neutral-200 shadow-2xl">

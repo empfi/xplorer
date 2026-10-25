@@ -16,6 +16,7 @@ import {
   Plus,
   Redo2,
   Scissors,
+  Settings,
   Trash2,
   Undo2,
 } from "lucide-react";
@@ -67,6 +68,7 @@ export interface ActionBarProps {
   onOpenDropdownMenu: (x: number, y: number, groups: MenuGroup[]) => void;
   showPane?: boolean;
   onTogglePane?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export default function ActionBar(p: ActionBarProps) {
@@ -275,6 +277,15 @@ export default function ActionBar(p: ActionBarProps) {
           shortcut: "Alt+Enter",
           disabled: isVirtual,
           action: () => p.onProperties(),
+        },
+      ],
+    },
+    {
+      items: [
+        {
+          label: "Settings",
+          icon: Settings,
+          action: () => p.onOpenSettings?.(),
         },
       ],
     },
@@ -489,8 +500,8 @@ export default function ActionBar(p: ActionBarProps) {
         <MoreHorizontal size={16} />
       </button>
 
-      {/* Right side: Details pane toggle */}
-      <div className="ml-auto flex items-center">
+      {/* Right side: Details pane & Settings toggles */}
+      <div className="ml-auto flex items-center gap-1">
         <button
           type="button"
           className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors ${
@@ -504,6 +515,15 @@ export default function ActionBar(p: ActionBarProps) {
         >
           <PanelRight size={15} />
           <span>Details</span>
+        </button>
+        <button
+          type="button"
+          className={iconBtn}
+          data-tooltip="Settings"
+          aria-label="Settings"
+          onClick={p.onOpenSettings}
+        >
+          <Settings size={15} />
         </button>
       </div>
     </div>
