@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0)"
+        required: true
+        default: "v0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri App & Bundles
+        run: npm run tauri build
+
+      - name: Prepare Release Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release_assets
+
+          $tag = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "${{ inputs.tag }}" }
+          Write-Host "Packaging release artifacts for $tag..."
+
+          # 1. Setup Wizard (NSIS installer)
+          $nsis = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis\*.exe" | Select-Object -First 1
+          if ($nsis) {
+              Copy-Item $nsis.FullName "release_assets\Xplorer-$tag-setup.exe"
+              Copy-Item $nsis.FullName "release_assets\Xplorer-setup.exe"
+              Write-Host "Found NSIS Setup: $($nsis.FullName)"
+          } else {
+              Write-Warning "NSIS setup executable not found in bundle/nsis/"
+          }
+
+          # 2. Standalone / Portable Executable
+          $standalone = "src-tauri\target\release\xplorer.exe"
+          if (Test-Path $standalone) {
+              Copy-Item $standalone "release_assets\Xplorer-$tag-portable.exe"
+              Copy-Item $standalone "release_assets\Xplorer-portable.exe"
+              Write-Host "Found Standalone Executable: $standalone"
+          } else {
+              Write-Warning "Standalone executable not found at $standalone"
+          }
+
+          # 3. Generate Checksums
+          Get-ChildItem -Path release_assets\*.exe | ForEach-Object {
+              $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+              "$hash  $($_.Name)" | Out-File -Append -Encoding utf8 release_assets\checksums.sha256
+          }
+
+          Get-ChildItem -Path release_assets
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          name: Xplorer ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            release_assets/*

@@ -1,0 +1,427 @@
+import { useEffect, useState } from "react";
+import type { FileMetadata, FsEntry } from "../types";
+import { api } from "../api";
+import {
+  Calendar,
+  Check,
+  Clock,
+  Code2,
+  Copy,
+  Eye,
+  File,
+  FileAudio,
+  FileCode,
+  FileText,
+  FileVideo,
+  Folder,
+  HardDrive,
+  Image as ImageIcon,
+  Info,
+  Loader2,
+  Maximize2,
+  Music,
+  Video,
+  X,
+} from "lucide-react";
+import EntryIcon from "./EntryIcon";
+
+interface Props {
+  selectedEntries: FsEntry[];
+  currentDir: string;
+  paneMode: "preview" | "details";
+  onSetPaneMode: (m: "preview" | "details") => void;
+  onClose: () => void;
+}
+
+const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp", "ico"]);
+const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "mkv", "avi", "m4v"]);
+const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "m4a", "aac", "wma"]);
+const TEXT_EXTS = new Set([
+  "txt", "md", "json", "js", "ts", "tsx", "jsx", "rs", "py", "html", "htm", "css",
+  "yaml", "yml", "xml", "csv", "log", "bat", "cmd", "ps1", "sh", "ini", "toml",
+  "env", "gitignore", "sql", "c", "cpp", "h", "hpp", "java", "go", "php", "rb",
+]);
+
+export default function PreviewPane({
+  selectedEntries,
+  currentDir,
+  paneMode,
+  onSetPaneMode,
+  onClose,
+}: Props) {
+  const single = selectedEntries.length === 1 ? selectedEntries[0] : null;
+  const [meta, setMeta] = useState<FileMetadata | null>(null);
+  const [textPreview, setTextPreview] = useState<string | null>(null);
+  const [mediaDataUrl, setMediaDataUrl] = useState<string | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaError, setMediaError] = useState(false);
+  const [imgDimensions, setImgDimensions] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const ext = single && !single.is_dir
+    ? single.name.slice(single.name.lastIndexOf(".") + 1).toLowerCase()
+    : "";
+
+  useEffect(() => {
+    let alive = true;
+    if (!single) {
+      setMeta(null);
+      setTextPreview(null);
+      setMediaDataUrl(null);
+      setMediaLoading(false);
+      setMediaError(false);
+      setImgDimensions(null);
+      return;
+    }
+
+    setLoading(true);
+    setTextPreview(null);
+    setMediaDataUrl(null);
+    setImgDimensions(null);
+    setMediaError(false);
+
+    api
+      .getFileMetadata(single.path)
+      .then((m) => {
+        if (alive) setMeta(m);
+      })
+      .catch(() => {
+        if (alive) setMeta(null);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+
+    if (!single.is_dir && (IMAGE_EXTS.has(ext) || VIDEO_EXTS.has(ext) || AUDIO_EXTS.has(ext))) {
+      setMediaLoading(true);
+      api
+        .readFileAsDataUrl(single.path)
+        .then((url) => {
+          if (!alive) return;
+          setMediaDataUrl(url);
+          setMediaLoading(false);
+        })
+        .catch(() => {
+          if (!alive) return;
+          setMediaDataUrl(null);
+          setMediaLoading(false);
+          setMediaError(true);
+        });
+    } else {
+      setMediaLoading(false);
+    }
+
+    if (!single.is_dir && TEXT_EXTS.has(ext)) {
+      api
+        .readTextPreview(single.path, 64 * 1024)
+        .then((txt) => {
+          if (alive) setTextPreview(txt);
+        })
+        .catch(() => {
+          if (alive) setTextPreview(null);
+        });
+    }
+
+    return () => {
+      alive = false;
+    };
+  }, [single?.path, ext]);
+
+  const copyPath = () => {
+    if (!single) return;
+    navigator.clipboard.writeText(single.path);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="flex h-full w-[320px] shrink-0 flex-col border-l border-[#2e2e2e] bg-[#1a1a1a] text-[12.5px] select-text">
+      {/* Top Header & Tab switcher */}
+      <div className="flex h-10 items-center justify-between border-b border-[#2e2e2e] px-3 bg-[#1e1e1e]">
+        <div className="flex items-center gap-1 rounded bg-[#282828] p-0.5 text-[11.5px]">
+          <button
+            type="button"
+            className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors ${
+              paneMode === "preview"
+                ? "bg-[#383838] text-white shadow-sm"
+                : "text-neutral-400 hover:text-neutral-200"
+            }`}
+            onClick={() => onSetPaneMode("preview")}
+          >
+            <Eye size={12} />
+            <span>Preview</span>
+          </button>
+          <button
+            type="button"
+            className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors ${
+              paneMode === "details"
+                ? "bg-[#383838] text-white shadow-sm"
+                : "text-neutral-400 hover:text-neutral-200"
+            }`}
+            onClick={() => onSetPaneMode("details")}
+          >
+            <Info size={12} />
+            <span>Details</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="flex h-6 w-6 items-center justify-center rounded text-neutral-400 hover:bg-[#2f2f2f] hover:text-white"
+          onClick={onClose}
+          title="Close pane"
+        >
+          <X size={13} />
+        </button>
+      </div>
+
+      {/* Pane Content */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {selectedEntries.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-neutral-400">
+            <Eye size={28} strokeWidth={1.5} className="text-neutral-500" />
+            <p className="text-[12px]">Select an item to view its preview and details.</p>
+          </div>
+        ) : selectedEntries.length > 1 ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2.5 border-b border-[#2e2e2e] pb-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#2a2a2a] text-neutral-300">
+                <FileText size={20} />
+              </div>
+              <div>
+                <p className="font-semibold text-white">{selectedEntries.length} items selected</p>
+                <p className="text-[11.5px] text-neutral-400">Multiple items</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5 text-[12px] text-neutral-300">
+              <span className="text-neutral-400">Selected files & folders:</span>
+              <ul className="max-h-48 overflow-y-auto space-y-1 rounded bg-[#222] p-2 text-[11px] text-neutral-300">
+                {selectedEntries.map((e) => (
+                  <li key={e.path} className="truncate">• {e.name}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : !single ? null : paneMode === "preview" ? (
+          /* PREVIEW MODE */
+          <div className="flex flex-col gap-4">
+            {/* Header info */}
+            <div className="flex items-center gap-2.5">
+              <EntryIcon entry={single} size={32} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-neutral-100" title={single.name}>
+                  {single.name}
+                </p>
+                <p className="truncate text-[11.5px] text-neutral-400">{single.item_type}</p>
+              </div>
+            </div>
+
+            {/* Media/Text Viewer */}
+            {IMAGE_EXTS.has(ext) ? (
+              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-[#303030] bg-[#141414] p-2">
+                {mediaLoading ? (
+                  <div className="flex h-40 flex-col items-center justify-center gap-2 text-neutral-400">
+                    <Loader2 size={20} className="animate-spin text-blue-400" />
+                    <span className="text-[11.5px]">Loading image preview...</span>
+                  </div>
+                ) : mediaDataUrl && !mediaError ? (
+                  <>
+                    <img
+                      src={mediaDataUrl}
+                      alt={single.name}
+                      onLoad={(e) => {
+                        const img = e.currentTarget;
+                        setImgDimensions(`${img.naturalWidth} × ${img.naturalHeight} px`);
+                      }}
+                      onError={() => setMediaError(true)}
+                      className="max-h-[340px] w-auto max-w-full rounded object-contain shadow-sm"
+                    />
+                    {imgDimensions && (
+                      <span className="text-[11px] text-neutral-400 font-mono">
+                        {imgDimensions}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex h-32 flex-col items-center justify-center gap-1.5 text-[11.5px] text-neutral-400">
+                    <ImageIcon size={24} className="text-neutral-500" />
+                    <span>Could not load image preview</span>
+                  </div>
+                )}
+              </div>
+            ) : VIDEO_EXTS.has(ext) ? (
+              <div className="overflow-hidden rounded-lg border border-[#303030] bg-[#141414]">
+                {mediaLoading ? (
+                  <div className="flex h-40 items-center justify-center text-neutral-400">
+                    <Loader2 size={20} className="animate-spin text-blue-400" />
+                  </div>
+                ) : mediaDataUrl ? (
+                  <video
+                    src={mediaDataUrl}
+                    controls
+                    className="max-h-[300px] w-full"
+                  />
+                ) : (
+                  <div className="flex h-32 items-center justify-center text-[11.5px] text-neutral-400">
+                    Could not load video preview
+                  </div>
+                )}
+              </div>
+            ) : AUDIO_EXTS.has(ext) ? (
+              <div className="flex flex-col items-center gap-4 rounded-lg border border-[#303030] bg-[#1f1f1f] p-4 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#2a2a2a] text-sky-400 shadow-md">
+                  <Music size={28} />
+                </div>
+                {mediaLoading ? (
+                  <div className="flex h-12 items-center justify-center text-neutral-400">
+                    <Loader2 size={16} className="animate-spin text-blue-400" />
+                  </div>
+                ) : mediaDataUrl ? (
+                  <audio src={mediaDataUrl} controls className="w-full" />
+                ) : (
+                  <div className="text-[11.5px] text-neutral-400">
+                    Could not load audio preview
+                  </div>
+                )}
+              </div>
+            ) : textPreview !== null ? (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                  <span className="flex items-center gap-1">
+                    <Code2 size={12} /> Text Preview
+                  </span>
+                  <span>{textPreview.split("\n").length} lines</span>
+                </div>
+                <pre className="max-h-[340px] overflow-auto rounded-lg border border-[#2e2e2e] bg-[#131313] p-2.5 font-mono text-[11px] leading-relaxed text-neutral-200">
+                  {textPreview || "(Empty file)"}
+                </pre>
+              </div>
+            ) : ext === "pdf" ? (
+              <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-[#303030] bg-[#1f1f1f] p-8 text-center text-neutral-300">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-950/60 text-red-400 border border-red-800 shadow-md">
+                  <FileText size={32} />
+                </div>
+                <div>
+                  <p className="font-medium text-white">{single.name}</p>
+                  <p className="text-[11px] text-neutral-400">{meta?.size_formatted || single.size}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] p-8 text-center text-neutral-400">
+                <File size={36} strokeWidth={1.5} className="text-neutral-500" />
+                <p className="text-[12px]">No preview available for this file type.</p>
+                <p className="text-[11px] text-neutral-500">Switch to the Details tab for metadata.</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* DETAILS MODE */
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3 border-b border-[#2e2e2e] pb-3">
+              <EntryIcon entry={single} size={36} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-white" title={single.name}>
+                  {single.name}
+                </p>
+                <p className="truncate text-[11.5px] text-neutral-400">
+                  {meta?.item_type || single.item_type}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {/* File size */}
+              <div>
+                <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
+                  Size
+                </span>
+                <p className="text-[12.5px] text-neutral-200">
+                  {meta?.size_formatted || single.size || "-"}
+                  {meta && meta.size_bytes > 0 && (
+                    <span className="ml-1 text-[11px] text-neutral-400">
+                      ({meta.size_bytes.toLocaleString()} bytes)
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {/* Full path */}
+              <div>
+                <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
+                  Location
+                </span>
+                <div className="mt-1 flex items-center justify-between gap-2 rounded bg-[#232323] p-1.5 text-[11.5px] text-neutral-300">
+                  <span className="truncate" title={single.path}>
+                    {single.path}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={copyPath}
+                    className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-[#333] hover:text-white"
+                    title="Copy full path"
+                  >
+                    {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="flex flex-col gap-2 pt-1 border-t border-[#2e2e2e]">
+                <div>
+                  <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
+                    Date Modified
+                  </span>
+                  <p className="text-[12px] text-neutral-200">
+                    {meta?.modified || single.modified || "-"}
+                  </p>
+                </div>
+                {meta && (
+                  <>
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
+                        Date Created
+                      </span>
+                      <p className="text-[12px] text-neutral-200">{meta.created}</p>
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
+                        Last Accessed
+                      </span>
+                      <p className="text-[12px] text-neutral-200">{meta.accessed}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Attributes */}
+              {meta && (
+                <div className="pt-1 border-t border-[#2e2e2e]">
+                  <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
+                    Attributes
+                  </span>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
+                    <span
+                      className={`rounded px-2 py-0.5 ${
+                        meta.is_readonly ? "bg-amber-950/60 text-amber-300 border border-amber-800" : "bg-[#252525] text-neutral-400"
+                      }`}
+                    >
+                      {meta.is_readonly ? "Read-only" : "Writable"}
+                    </span>
+                    <span
+                      className={`rounded px-2 py-0.5 ${
+                        meta.is_hidden ? "bg-purple-950/60 text-purple-300 border border-purple-800" : "bg-[#252525] text-neutral-400"
+                      }`}
+                    >
+                      {meta.is_hidden ? "Hidden" : "Visible"}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

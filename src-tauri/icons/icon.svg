@@ -1,0 +1,32 @@
+<svg width="256" height="256" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="xp_bg" x1="14" y1="14" x2="114" y2="114" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0080FF"/>
+      <stop offset="60%" stop-color="#0052CC"/>
+      <stop offset="100%" stop-color="#003399"/>
+    </linearGradient>
+    <linearGradient id="xp_x1" x1="34" y1="34" x2="94" y2="94" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#BAE6FD"/>
+    </linearGradient>
+    <linearGradient id="xp_x2" x1="94" y1="34" x2="34" y2="94" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="xp_glow" x1="64" y1="20" x2="64" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Squircle -->
+  <rect x="12" y="12" width="104" height="104" rx="26" fill="url(#xp_bg)"/>
+  <!-- Top specular highlight -->
+  <path d="M12 38C12 23.6406 23.6406 12 38 12H90C104.359 12 116 23.6406 116 38V54C116 54 84 62 12 62V38Z" fill="url(#xp_glow)"/>
+  <!-- Outer Rim border -->
+  <rect x="12.75" y="12.75" width="102.5" height="102.5" rx="25.25" stroke="#38BDF8" stroke-opacity="0.35" stroke-width="1.5"/>
+  <!-- Dynamic Xplorer 'X' -->
+  <path d="M38 38L90 90" stroke="url(#xp_x1)" stroke-width="13" stroke-linecap="round"/>
+  <path d="M90 38L38 90" stroke="url(#xp_x2)" stroke-width="13" stroke-linecap="round"/>
+  <!-- Center speed notch -->
+  <circle cx="64" cy="64" r="4.5" fill="#FFFFFF"/>
+</svg>

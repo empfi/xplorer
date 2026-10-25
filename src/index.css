@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* ---- Windows 11 dark theme globals ---- */
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #202020;
+  color: #e0e0e0;
+  /* Native app feel: no text selection anywhere by default */
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+/* Address bar doesn't need selection disabled */
+input,
+.allow-select {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ---- Sleek thin scrollbars (hidden-by-default, like Windows 11) ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #464646 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*:hover::-webkit-scrollbar-thumb,
+*:focus::-webkit-scrollbar-thumb {
+  background: #5d5d5d;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #7a7a7a;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::selection {
+  background: #0078d4;
+  color: #fff;
+}
+
+@keyframes explorer-glide {
+  0% { transform: translateX(-100%); width: 30%; }
+  50% { width: 55%; }
+  100% { transform: translateX(350%); width: 30%; }
+}
+.animate-explorer-progress {
+  animation: explorer-glide 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
