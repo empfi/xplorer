@@ -190,18 +190,6 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
             </div>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-[#2e2e2e] bg-[#232323] px-5 py-3 text-[11.5px] text-neutral-400">
-          <span>Xplorer v0.1.0 • Windows 11 Fluent Explorer</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded bg-[#333] hover:bg-[#3d3d3d] px-4 py-1.5 font-medium text-white transition-colors"
-          >
-            Done
-          </button>
-        </div>
       </div>
     </div>
   );
