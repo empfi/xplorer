@@ -20,6 +20,7 @@ import {
   Loader2,
   Maximize2,
   Music,
+  PanelRight,
   Share2,
   Video,
   X,
@@ -29,8 +30,6 @@ import EntryIcon from "./EntryIcon";
 interface Props {
   selectedEntries: FsEntry[];
   currentDir: string;
-  paneMode: "preview" | "details";
-  onSetPaneMode: (m: "preview" | "details") => void;
   onClose: () => void;
 }
 
@@ -45,9 +44,7 @@ const TEXT_EXTS = new Set([
 
 export default function PreviewPane({
   selectedEntries,
-  currentDir,
-  paneMode,
-  onSetPaneMode,
+  currentDir: _currentDir,
   onClose,
 }: Props) {
   const single = selectedEntries.length === 1 ? selectedEntries[0] : null;
@@ -157,40 +154,18 @@ export default function PreviewPane({
 
   return (
     <div className="flex h-full w-[320px] shrink-0 flex-col border-l border-[#2e2e2e] bg-[#1a1a1a] text-[12.5px] select-text">
-      {/* Top Header & Tab switcher */}
+      {/* Top Header */}
       <div className="flex h-10 items-center justify-between border-b border-[#2e2e2e] px-3 bg-[#1e1e1e]">
-        <div className="flex items-center gap-1 rounded bg-[#282828] p-0.5 text-[11.5px]">
-          <button
-            type="button"
-            className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors ${
-              paneMode === "preview"
-                ? "bg-[#383838] text-white shadow-sm"
-                : "text-neutral-400 hover:text-neutral-200"
-            }`}
-            onClick={() => onSetPaneMode("preview")}
-          >
-            <Eye size={12} />
-            <span>Preview</span>
-          </button>
-          <button
-            type="button"
-            className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors ${
-              paneMode === "details"
-                ? "bg-[#383838] text-white shadow-sm"
-                : "text-neutral-400 hover:text-neutral-200"
-            }`}
-            onClick={() => onSetPaneMode("details")}
-          >
-            <Info size={12} />
-            <span>Details</span>
-          </button>
+        <div className="flex items-center gap-2 text-neutral-200">
+          <PanelRight size={14} className="text-neutral-400" />
+          <span className="text-[12.5px] font-semibold">Details</span>
         </div>
 
         <button
           type="button"
-          className="flex h-6 w-6 items-center justify-center rounded text-neutral-400 hover:bg-[#2f2f2f] hover:text-white"
+          className="flex h-6 w-6 items-center justify-center rounded text-neutral-400 hover:bg-[#2f2f2f] hover:text-white transition-colors"
           onClick={onClose}
-          title="Close pane"
+          title="Close details pane"
         >
           <X size={13} />
         </button>
@@ -200,8 +175,8 @@ export default function PreviewPane({
       <div className="flex-1 overflow-y-auto p-4">
         {selectedEntries.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-neutral-400">
-            <Eye size={28} strokeWidth={1.5} className="text-neutral-500" />
-            <p className="text-[12px]">Select an item to view its preview and details.</p>
+            <PanelRight size={28} strokeWidth={1.5} className="text-neutral-500" />
+            <p className="text-[12px]">Select an item to view its details and preview.</p>
           </div>
         ) : selectedEntries.length > 1 ? (
           <div className="flex flex-col gap-3">
@@ -223,8 +198,7 @@ export default function PreviewPane({
               </ul>
             </div>
           </div>
-        ) : !single ? null : paneMode === "preview" ? (
-          /* PREVIEW MODE */
+        ) : !single ? null : (
           <div className="flex flex-col gap-4">
             {/* Header info */}
             <div className="flex items-center gap-2.5">
@@ -345,44 +319,6 @@ export default function PreviewPane({
             )}
 
             {/* Details Section right below the preview in the same tab */}
-            <div className="border-t border-[#2e2e2e] pt-3">
-              <DetailsList
-                single={single}
-                meta={meta}
-                copyPath={copyPath}
-                copied={copied}
-                imgDimensions={imgDimensions}
-              />
-            </div>
-          </div>
-        ) : (
-          /* DETAILS MODE */
-          <div className="flex flex-col gap-4">
-            <div className="flex h-36 w-full items-center justify-center rounded-lg bg-[#252525] border border-[#303030]">
-              <EntryIcon entry={single} size={64} />
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <EntryIcon entry={single} size={28} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-white" title={single.name}>
-                  {single.name}
-                </p>
-                <p className="truncate text-[11.5px] text-neutral-400">
-                  {meta?.item_type || single.item_type}
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={shareFile}
-              className="flex items-center gap-1.5 rounded bg-[#2b2b2b] hover:bg-[#353535] px-3 py-1.5 text-[12px] font-medium text-neutral-200 border border-[#383838] transition-colors w-fit"
-            >
-              <Share2 size={13} />
-              <span>{shared ? "Path Copied!" : "Share"}</span>
-            </button>
-
             <div className="border-t border-[#2e2e2e] pt-3">
               <DetailsList
                 single={single}

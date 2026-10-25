@@ -65,10 +65,8 @@ export interface ActionBarProps {
   onRedo?: () => void;
   redoLabel?: string;
   onOpenDropdownMenu: (x: number, y: number, groups: MenuGroup[]) => void;
-  showPreviewPane?: boolean;
-  showDetailsPane?: boolean;
-  onTogglePreview?: () => void;
-  onToggleDetails?: () => void;
+  showPane?: boolean;
+  onTogglePane?: () => void;
 }
 
 export default function ActionBar(p: ActionBarProps) {
@@ -219,16 +217,10 @@ export default function ActionBar(p: ActionBarProps) {
     {
       items: [
         {
-          label: "Preview pane",
-          shortcut: "Alt+P",
-          checked: !!p.showPreviewPane,
-          action: () => p.onTogglePreview?.(),
-        },
-        {
           label: "Details pane",
-          shortcut: "Alt+Shift+P",
-          checked: !!p.showDetailsPane,
-          action: () => p.onToggleDetails?.(),
+          shortcut: "Alt+P",
+          checked: !!p.showPane,
+          action: () => p.onTogglePane?.(),
         },
       ],
     },
@@ -497,25 +489,21 @@ export default function ActionBar(p: ActionBarProps) {
         <MoreHorizontal size={16} />
       </button>
 
-      {/* Right side: Preview pane & Details pane toggles */}
-      <div className="ml-auto flex items-center gap-0.5">
+      {/* Right side: Details pane toggle */}
+      <div className="ml-auto flex items-center">
         <button
           type="button"
-          className={`${iconBtn} ${p.showPreviewPane ? "bg-[#333333] text-sky-400" : ""}`}
-          data-tooltip="Preview pane (Alt+P)"
-          aria-label="Preview pane"
-          onClick={p.onTogglePreview}
+          className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors ${
+            p.showPane
+              ? "bg-[#333333] text-sky-400 border border-[#404040]"
+              : "text-neutral-300 hover:bg-[#282828] hover:text-white"
+          }`}
+          data-tooltip="Details pane (Alt+P)"
+          aria-label="Details pane"
+          onClick={p.onTogglePane}
         >
           <PanelRight size={15} />
-        </button>
-        <button
-          type="button"
-          className={`${iconBtn} ${p.showDetailsPane ? "bg-[#333333] text-sky-400" : ""}`}
-          data-tooltip="Details pane (Alt+Shift+P)"
-          aria-label="Details pane"
-          onClick={p.onToggleDetails}
-        >
-          <Info size={15} />
+          <span>Details</span>
         </button>
       </div>
     </div>

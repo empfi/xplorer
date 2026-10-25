@@ -283,37 +283,16 @@ export default function App() {
       return false;
     }
   });
-  const [paneMode, setPaneMode] = useState<"preview" | "details">(() => {
-    try {
-      return localStorage.getItem("pane-mode") === "details" ? "details" : "preview";
-    } catch {
-      return "preview";
-    }
-  });
 
-  const togglePreview = useCallback(() => {
+  const togglePane = useCallback(() => {
     setShowPane((prev) => {
-      const next = !prev || paneMode !== "preview";
+      const next = !prev;
       try {
         localStorage.setItem("show-pane", next ? "1" : "0");
-        localStorage.setItem("pane-mode", "preview");
       } catch {}
-      setPaneMode("preview");
       return next;
     });
-  }, [paneMode]);
-
-  const toggleDetails = useCallback(() => {
-    setShowPane((prev) => {
-      const next = !prev || paneMode !== "details";
-      try {
-        localStorage.setItem("show-pane", next ? "1" : "0");
-        localStorage.setItem("pane-mode", "details");
-      } catch {}
-      setPaneMode("details");
-      return next;
-    });
-  }, [paneMode]);
+  }, []);
 
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>(() => {
     try {
@@ -2268,8 +2247,7 @@ export default function App() {
         refresh();
       } else if (e.altKey && (e.key === "p" || e.key === "P")) {
         e.preventDefault();
-        if (e.shiftKey) toggleDetails();
-        else togglePreview();
+        togglePane();
       } else if (e.key === "F2" && active && active.selected.size === 1) {
         e.preventDefault();
         setRenameTarget([...active.selected][0]);
@@ -2649,10 +2627,8 @@ export default function App() {
         groupBy={groupBy}
         showHidden={showHidden}
         shellNewItems={shellNewItems}
-        showPreviewPane={showPane && paneMode === "preview"}
-        showDetailsPane={showPane && paneMode === "details"}
-        onTogglePreview={togglePreview}
-        onToggleDetails={toggleDetails}
+        showPane={showPane}
+        onTogglePane={togglePane}
         onSetViewPreset={(v, z) => setTab(active.id, { view: v, zoom: z })}
         onSortKey={(k) => setSort((prev) => ({ key: k, dir: prev.dir }))}
         onSortDir={(d) => setSort((prev) => ({ ...prev, dir: d }))}
@@ -2770,8 +2746,6 @@ export default function App() {
           <PreviewPane
             selectedEntries={selectedEntriesList}
             currentDir={active.path}
-            paneMode={paneMode}
-            onSetPaneMode={setPaneMode}
             onClose={() => setShowPane(false)}
           />
         )}
