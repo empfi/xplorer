@@ -1,6 +1,7 @@
 pub mod clipboard;
 pub mod context_menu;
 pub mod default_manager;
+pub mod dialog_companion;
 pub mod fs_ops;
 pub mod hotkey;
 pub mod icons;

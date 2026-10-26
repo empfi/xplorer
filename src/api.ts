@@ -109,6 +109,50 @@ export function onWinEPressed(cb: () => void): () => void {
   };
 }
 
+export interface FileDialogEventData {
+  hwnd: number;
+  active_folder: string;
+  tabs: string[];
+}
+
+/**
+ * Subscribe to Windows Open/Save file dialog detection events.
+ */
+export function onFileDialogDetected(cb: (data: FileDialogEventData) => void): () => void {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return () => {};
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+  listen<FileDialogEventData>("file-dialog-detected", (ev) => cb(ev.payload))
+    .then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    })
+    .catch(() => {});
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
+}
+
+/**
+ * Subscribe to file dialog closed events.
+ */
+export function onFileDialogClosed(cb: () => void): () => void {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return () => {};
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+  listen<void>("file-dialog-closed", () => cb())
+    .then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    })
+    .catch(() => {});
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
+}
+
 /**
  * Subscribe to streaming copy/move progress updates (speed, percentage, remaining bytes).
  */
@@ -218,4 +262,15 @@ export const api = {
   isWinEInterceptionEnabled: () => invoke<boolean>("is_win_e_interception_enabled"),
   setWinEInterceptionEnabled: (enabled: boolean) =>
     invoke<void>("set_win_e_interception_enabled", { enabled }),
+  syncActiveFolder: (activePath: string, tabs: string[]) =>
+    invoke<void>("sync_active_folder", { activePath, tabs }),
+  quickSwitchFileDialog: () => invoke<boolean>("quick_switch_file_dialog"),
+  jumpDialogToPath: (targetPath: string) =>
+    invoke<boolean>("jump_dialog_to_path", { targetPath }),
+  isDialogCompanionEnabled: () => invoke<boolean>("is_dialog_companion_enabled"),
+  setDialogCompanionEnabled: (enabled: boolean) =>
+    invoke<void>("set_dialog_companion_enabled", { enabled }),
+  isAutoJumpEnabled: () => invoke<boolean>("is_auto_jump_enabled"),
+  setAutoJumpEnabled: (enabled: boolean) =>
+    invoke<void>("set_auto_jump_enabled", { enabled }),
 };

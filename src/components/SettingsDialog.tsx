@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import {
   CheckCircle2,
+  FolderSymlink,
   Monitor,
   Settings,
   X,
@@ -17,8 +18,12 @@ interface Props {
 export default function SettingsDialog({ open, onClose, showToast }: Props) {
   const [isDefault, setIsDefault] = useState(false);
   const [winEEnabled, setWinEEnabled] = useState(false);
+  const [companionEnabled, setCompanionEnabled] = useState(true);
+  const [autoJumpEnabled, setAutoJumpEnabled] = useState(true);
   const [loadingDefault, setLoadingDefault] = useState(false);
   const [loadingWinE, setLoadingWinE] = useState(false);
+  const [loadingCompanion, setLoadingCompanion] = useState(false);
+  const [loadingAutoJump, setLoadingAutoJump] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -39,6 +44,14 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
       .isWinEInterceptionEnabled()
       .then(setWinEEnabled)
       .catch((err) => console.error("isWinEInterceptionEnabled error:", err));
+    api
+      .isDialogCompanionEnabled()
+      .then(setCompanionEnabled)
+      .catch((err) => console.error("isDialogCompanionEnabled error:", err));
+    api
+      .isAutoJumpEnabled()
+      .then(setAutoJumpEnabled)
+      .catch((err) => console.error("isAutoJumpEnabled error:", err));
   }, [open]);
 
   if (!open) return null;
@@ -77,6 +90,42 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
       showToast(String(err));
     } finally {
       setLoadingWinE(false);
+    }
+  };
+
+  const toggleCompanion = async () => {
+    setLoadingCompanion(true);
+    const next = !companionEnabled;
+    try {
+      await api.setDialogCompanionEnabled(next);
+      setCompanionEnabled(next);
+      showToast(
+        next
+          ? "File dialog quick-switch & companion active."
+          : "File dialog companion disabled.",
+      );
+    } catch (err) {
+      showToast(String(err));
+    } finally {
+      setLoadingCompanion(false);
+    }
+  };
+
+  const toggleAutoJump = async () => {
+    setLoadingAutoJump(true);
+    const next = !autoJumpEnabled;
+    try {
+      await api.setAutoJumpEnabled(next);
+      setAutoJumpEnabled(next);
+      showToast(
+        next
+          ? "File dialogs will auto-jump to your current folder."
+          : "Auto-jump disabled. Use Ctrl+G to jump manually.",
+      );
+    } catch (err) {
+      showToast(String(err));
+    } finally {
+      setLoadingAutoJump(false);
     }
   };
 
@@ -183,6 +232,75 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
                   <span
                     className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                       winEEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* File Dialog Quick-Switch Card */}
+            <div className="flex flex-col gap-2.5 rounded-lg border border-[#333] bg-[#191919] p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">File Dialog Quick-Switch (Ctrl + G)</span>
+                    {companionEnabled && (
+                      <span className="flex items-center gap-1 rounded bg-sky-950/80 px-2 py-0.5 text-[11px] font-medium text-sky-300 border border-sky-800">
+                        <FolderSymlink size={11} /> Active
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11.5px] text-neutral-400 leading-relaxed">
+                    Press <kbd className="rounded bg-[#2a2a2a] px-1 py-0.5 font-mono text-neutral-200 text-[10.5px]">Ctrl+G</kbd> inside
+                    any Open or Save file dialog (in Chrome, Discord, Photoshop, etc.) to immediately jump to your active Xplorer folder.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={loadingCompanion}
+                  onClick={toggleCompanion}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    companionEnabled ? "bg-[#0078d4]" : "bg-[#333333]"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      companionEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Auto-Jump File Dialogs Card */}
+            <div className="flex flex-col gap-2.5 rounded-lg border border-[#333] bg-[#191919] p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">Auto-Jump Open/Save Dialogs</span>
+                    {autoJumpEnabled && (
+                      <span className="flex items-center gap-1 rounded bg-emerald-950/80 px-2 py-0.5 text-[11px] font-medium text-emerald-300 border border-emerald-800">
+                        <Zap size={11} /> Auto
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11.5px] text-neutral-400 leading-relaxed">
+                    Whenever an Open or Save file dialog appears on your PC, automatically navigate it directly to your currently active Xplorer directory.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={loadingAutoJump}
+                  onClick={toggleAutoJump}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    autoJumpEnabled ? "bg-[#0078d4]" : "bg-[#333333]"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      autoJumpEnabled ? "translate-x-5" : "translate-x-0"
                     }`}
                   />
                 </button>

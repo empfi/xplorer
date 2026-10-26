@@ -5,8 +5,8 @@ mod commands;
 use std::sync::Mutex;
 
 use commands::{
-    clipboard, context_menu, default_manager, fs_ops, hotkey, shell_new, single_instance, system,
-    watcher,
+    clipboard, context_menu, default_manager, dialog_companion, fs_ops, hotkey, shell_new,
+    single_instance, system, watcher,
 };
 
 fn main() {
@@ -27,6 +27,7 @@ fn main() {
             system::spawn_drive_watcher(app.handle().clone());
             single_instance::start_single_instance_listener(app.handle().clone());
             hotkey::init_hotkey_listener(app.handle().clone());
+            dialog_companion::start_dialog_companion_watcher(app.handle().clone());
             Ok(())
         })
         .manage(Mutex::new(clipboard::Clipboard::default()))
@@ -91,6 +92,13 @@ fn main() {
             default_manager::unset_as_default_file_manager,
             hotkey::is_win_e_interception_enabled,
             hotkey::set_win_e_interception_enabled,
+            dialog_companion::sync_active_folder,
+            dialog_companion::quick_switch_file_dialog,
+            dialog_companion::jump_dialog_to_path,
+            dialog_companion::is_dialog_companion_enabled,
+            dialog_companion::set_dialog_companion_enabled,
+            dialog_companion::is_auto_jump_enabled,
+            dialog_companion::set_auto_jump_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

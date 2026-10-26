@@ -4,6 +4,7 @@ use tauri::{Emitter, Manager};
 
 static WIN_E_ENABLED: AtomicBool = AtomicBool::new(false);
 static WIN_KEY_DOWN: AtomicBool = AtomicBool::new(false);
+static CTRL_KEY_DOWN: AtomicBool = AtomicBool::new(false);
 static APP_HANDLE: Mutex<Option<tauri::AppHandle>> = Mutex::new(None);
 
 #[cfg(windows)]
@@ -11,13 +12,16 @@ pub mod windows_impl {
     use super::*;
     use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW,
+        CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, SetWindowsHookExW,
         TranslateMessage, KBDLLHOOKSTRUCT, MSG,
         WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
     };
 
     const VK_LWIN: u16 = 0x5B;
     const VK_RWIN: u16 = 0x5C;
+    const VK_CONTROL: u16 = 0x11;
+    const VK_LCONTROL: u16 = 0xA2;
+    const VK_RCONTROL: u16 = 0xA3;
 
     pub unsafe extern "system" fn keyboard_proc(
         ncode: i32,
@@ -37,6 +41,20 @@ pub mod windows_impl {
                     WIN_KEY_DOWN.store(true, Ordering::SeqCst);
                 } else if is_up {
                     WIN_KEY_DOWN.store(false, Ordering::SeqCst);
+                }
+            } else if vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL {
+                if is_down {
+                    CTRL_KEY_DOWN.store(true, Ordering::SeqCst);
+                } else if is_up {
+                    CTRL_KEY_DOWN.store(false, Ordering::SeqCst);
+                }
+            } else if vk == 0x47 /* 'G' */ && is_down {
+                if CTRL_KEY_DOWN.load(Ordering::SeqCst) {
+                    let fg = GetForegroundWindow();
+                    if !fg.0.is_null() && crate::commands::dialog_companion::is_file_dialog(fg) {
+                        let _ = crate::commands::dialog_companion::quick_switch_file_dialog();
+                        return LRESULT(1);
+                    }
                 }
             } else if vk == 0x45 /* 'E' */ && is_down {
                 if WIN_KEY_DOWN.load(Ordering::SeqCst) && WIN_E_ENABLED.load(Ordering::SeqCst) {

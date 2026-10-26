@@ -29,6 +29,7 @@ import ContextMenu, { type MenuGroup, type MenuItem } from "./components/Context
 import InstantTooltip from "./components/InstantTooltip";
 import PreviewPane from "./components/PreviewPane";
 import SettingsDialog from "./components/SettingsDialog";
+import FileDialogCompanion from "./components/FileDialogCompanion";
 import TransferDialog from "./components/TransferDialog";
 import {
   AppWindow,
@@ -715,6 +716,18 @@ export default function App() {
       openTab(downloadsPath || getInitialPath());
     });
   }, [downloadsPath, openTab]);
+
+  // Synchronize current folder and open tabs to Rust for File Dialog Quick-Switch (Ctrl+G) & Auto-jump
+  useEffect(() => {
+    if (active && !active.path.startsWith("shell:") && !active.path.startsWith("upnp::")) {
+      api
+        .syncActiveFolder(
+          active.path,
+          tabs.map((t) => t.path),
+        )
+        .catch(() => {});
+    }
+  }, [active?.path, tabs]);
 
   useEffect(() => {
     if (!isRecycle || !active) return;
@@ -2921,6 +2934,12 @@ export default function App() {
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        showToast={showToast}
+      />
+
+      <FileDialogCompanion
+        activePath={active.path}
+        tabs={tabs}
         showToast={showToast}
       />
 
