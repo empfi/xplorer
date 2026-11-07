@@ -15,6 +15,13 @@ const PIPE_NAME: &str = r"\\.\pipe\xplorer_single_instance_ipc";
 
 pub struct InitialCliPath(pub Mutex<Option<String>>);
 
+/// Returns true if the process was started with `--background` or `--minimized` (e.g. on Windows startup).
+pub fn is_background_launch() -> bool {
+    std::env::args()
+        .skip(1)
+        .any(|a| a.eq_ignore_ascii_case("--background") || a.eq_ignore_ascii_case("--minimized"))
+}
+
 /// Extract target folder or file path from CLI arguments, if any.
 pub fn parse_cli_target_path() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
@@ -23,30 +30,46 @@ pub fn parse_cli_target_path() -> Option<String> {
     }
 
     for arg in &args[1..] {
-        let trimmed = arg.trim().trim_matches('"');
-        if trimmed.starts_with('-') || trimmed.starts_with('/') {
+        let mut trimmed = arg.trim().trim_matches('"');
+        if trimmed.eq_ignore_ascii_case("--background")
+            || trimmed.eq_ignore_ascii_case("--minimized")
+        {
             continue;
         }
+        // Support explorer-style flags like /select,"C:\path" or /e,"C:\path"
+        if let Some(rest) = trimmed
+            .strip_prefix("/select,")
+            .or_else(|| trimmed.strip_prefix("/e,"))
+            .or_else(|| trimmed.strip_prefix("/root,"))
+        {
+            trimmed = rest.trim().trim_matches('"');
+        } else if trimmed.starts_with('-') || trimmed.starts_with('/') {
+            continue;
+        }
+
         if trimmed.starts_with("shell:") {
             return Some(trimmed.to_string());
         }
+
         let p = Path::new(trimmed);
         let bytes = trimmed.as_bytes();
         let is_drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
         if p.exists() || is_drive || trimmed.starts_with(r"\\") {
-            if let Ok(canon) = std::fs::canonicalize(p) {
+            let target_path = if p.is_file() {
+                p.parent().unwrap_or(p)
+            } else {
+                p
+            };
+            if let Ok(canon) = std::fs::canonicalize(target_path) {
                 let s = canon.to_string_lossy().to_string();
-                // Strip Windows verbatim prefix \\?\ if present
                 let clean = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
                 return Some(clean);
             }
-            return Some(trimmed.to_string());
+            return Some(target_path.to_string_lossy().to_string());
         }
     }
     None
 }
-
-
 
 /// Attempt to connect to an existing running instance of Xplorer.
 /// If successful, forwards the path and returns `true` (caller should exit).
@@ -73,7 +96,12 @@ pub fn forward_to_existing_instance(target_path: Option<&str>) -> bool {
 
             if let Ok(pipe_handle) = handle {
                 if pipe_handle != INVALID_HANDLE_VALUE {
-                    let msg = target_path.unwrap_or("").as_bytes();
+                    let payload = if is_background_launch() && target_path.is_none() {
+                        "__BACKGROUND_NOOP__"
+                    } else {
+                        target_path.unwrap_or("")
+                    };
+                    let msg = payload.as_bytes();
                     let len_buf = (msg.len() as u32).to_le_bytes();
 
                     let mut written = 0u32;
@@ -174,17 +202,19 @@ pub fn start_single_instance_listener(app_handle: tauri::AppHandle) {
 
                         let path_str = String::from_utf8_lossy(&msg_buf).trim().to_string();
 
-                        // Focus window and emit event
-                        if let Some(w) = app_handle.get_webview_window("main") {
-                            let _ = w.unminimize();
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
+                        if path_str != "__BACKGROUND_NOOP__" {
+                            // Focus window and emit event
+                            if let Some(w) = app_handle.get_webview_window("main") {
+                                let _ = w.unminimize();
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
 
-                        if !path_str.is_empty() {
-                            let _ = app_handle.emit("open-path-external", path_str);
-                        } else {
-                            let _ = app_handle.emit("open-path-external", "");
+                            if !path_str.is_empty() {
+                                let _ = app_handle.emit("open-path-external", path_str);
+                            } else {
+                                let _ = app_handle.emit("open-path-external", "");
+                            }
                         }
 
                         // Send 1-byte ACK

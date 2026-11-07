@@ -96,6 +96,8 @@ pub fn list_recycle_bin() -> Result<RecycleListing, String> {
                     size,
                     item_type: item_type(&name, is_dir),
                     modified: String::new(),
+                    is_admin: false,
+                    is_shortcut: false,
                 });
             }
         }

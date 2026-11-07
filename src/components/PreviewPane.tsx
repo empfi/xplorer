@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FileMetadata, FsEntry } from "../types";
 import { api } from "../api";
+import { displayNameOf } from "./FileView";
 import {
   Calendar,
   Check,
@@ -173,7 +174,7 @@ export default function PreviewPane({
               <span className="text-neutral-400">Selected files & folders:</span>
               <ul className="max-h-48 overflow-y-auto space-y-1 rounded bg-[#222] p-2 text-[11px] text-neutral-300">
                 {selectedEntries.map((e) => (
-                  <li key={e.path} className="truncate">• {e.name}</li>
+                  <li key={e.path} className="truncate">• {displayNameOf(e.name)}</li>
                 ))}
               </ul>
             </div>
@@ -184,8 +185,8 @@ export default function PreviewPane({
             <div className="flex items-center gap-2.5">
               <EntryIcon entry={single} size={32} />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-neutral-100" title={single.name}>
-                  {single.name}
+                <p className="truncate font-semibold text-neutral-100" title={displayNameOf(single.name)}>
+                  {displayNameOf(single.name)}
                 </p>
                 <p className="truncate text-[11.5px] text-neutral-400">{single.item_type}</p>
               </div>
@@ -203,7 +204,7 @@ export default function PreviewPane({
                   <>
                     <img
                       src={mediaDataUrl}
-                      alt={single.name}
+                      alt={displayNameOf(single.name)}
                       onLoad={(e) => {
                         const img = e.currentTarget;
                         setImgDimensions(`${img.naturalWidth} × ${img.naturalHeight} px`);
@@ -277,7 +278,7 @@ export default function PreviewPane({
                   <FileText size={32} />
                 </div>
                 <div>
-                  <p className="font-medium text-white">{single.name}</p>
+                  <p className="font-medium text-white">{displayNameOf(single.name)}</p>
                   <p className="text-[11px] text-neutral-400">{meta?.size_formatted || single.size}</p>
                 </div>
               </div>

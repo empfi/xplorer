@@ -9,6 +9,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { acceptsFileDrop, extractDropItems } from "../dragDrop";
 
 interface Props {
   path: string;
@@ -19,6 +20,7 @@ interface Props {
   onUp: () => void;
   onRefresh: () => void;
   onNavigate: (path: string) => void;
+  onOpenNewTab?: (path: string) => void;
   /** Live folder filter (client-side, updates as you type). */
   query: string;
   onQuery: (q: string) => void;
@@ -73,6 +75,7 @@ export default function Topbar({
   onUp,
   onRefresh,
   onNavigate,
+  onOpenNewTab,
   query,
   onQuery,
   loading = false,
@@ -88,23 +91,23 @@ export default function Topbar({
   const breadcrumbsRef = useRef<HTMLDivElement>(null);
   const [dropSeg, setDropSeg] = useState<string | null>(null);
 
-  const segAccepts = (ev: React.DragEvent) => {
-    const types = Array.from(ev.dataTransfer.types);
-    return (types.includes("application/x-file-paths") || types.includes("Files")) && !!onDropInto;
-  };
+  const segAccepts = (ev: React.DragEvent) => acceptsFileDrop(ev) && !!onDropInto;
 
   const segDrop = (segPath: string) => (ev: React.DragEvent) => {
     ev.preventDefault();
     ev.stopPropagation();
     setDropSeg(null);
     if (!onDropInto) return;
-    try {
-      const arr = JSON.parse(ev.dataTransfer.getData("application/x-file-paths")) as string[];
-      if (Array.isArray(arr) && arr.length && segPath !== path.replace(/\\+$/, "")) {
-        onDropInto(segPath, arr);
-      }
-    } catch {
-      /* ignore malformed drops */
+    const items = extractDropItems(ev);
+    const normTarget = segPath.replace(/[\\/]+$/, "").toLowerCase();
+    const itemsToMove = items.filter((p) => {
+      const normP = p.replace(/[\\/]+$/, "").toLowerCase();
+      if (normP === normTarget) return false;
+      const parent = normP.replace(/[\\/][^\\/]+$/, "");
+      return parent !== normTarget;
+    });
+    if (itemsToMove.length) {
+      onDropInto(segPath, itemsToMove);
     }
   };
 
@@ -222,12 +225,21 @@ export default function Topbar({
                     type="button"
                     data-drop-path={!isLast ? seg.path : undefined}
                     onClick={() => onNavigate(seg.path)}
+                    onMouseDown={(e) => {
+                      if (e.button === 1) e.preventDefault();
+                    }}
+                    onAuxClick={(e) => {
+                      if (e.button === 1) {
+                        e.preventDefault();
+                        (onOpenNewTab ?? onNavigate)(seg.path);
+                      }
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && onNavigate(seg.path)}
                     onDragOver={(ev) => {
-                      if (segAccepts(ev) && !isLast) {
+                      if (segAccepts(ev)) {
                         ev.preventDefault();
-                        ev.dataTransfer.dropEffect = "move";
-                        setDropSeg(seg.path);
+                        ev.dataTransfer.dropEffect = "copy";
+                        if (!isLast) setDropSeg(seg.path);
                       }
                     }}
                     onDragLeave={() => setDropSeg((p) => (p === seg.path ? null : p))}
@@ -236,7 +248,7 @@ export default function Topbar({
                       isLast
                         ? "text-white hover:bg-[#303030]"
                         : "text-neutral-300 hover:bg-[#303030] hover:text-white"
-                    } ${dropSeg === seg.path && !isLast ? "bg-[#323232] ring-2 ring-[#0078d4]" : ""}`}
+                    } ${dropSeg === seg.path && !isLast ? "bg-[#323232]" : ""}`}
                   >
                     {seg.name}
                   </button>

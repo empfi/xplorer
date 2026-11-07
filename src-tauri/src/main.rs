@@ -3,6 +3,7 @@
 mod commands;
 
 use std::sync::Mutex;
+use tauri::Manager;
 
 use commands::{
     clipboard, context_menu, default_manager, dialog_companion, fs_ops, hotkey, shell_new,
@@ -24,11 +25,29 @@ fn main() {
                 let default_icon_bytes = include_bytes!("../icons/icon.png");
                 let _ = std::fs::write(&temp_icon, default_icon_bytes);
             }
+            default_manager::init_background_state();
+
+            if single_instance::is_background_launch() {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
+
             system::spawn_drive_watcher(app.handle().clone());
             single_instance::start_single_instance_listener(app.handle().clone());
             hotkey::init_hotkey_listener(app.handle().clone());
             dialog_companion::start_dialog_companion_watcher(app.handle().clone());
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if default_manager::should_keep_in_background() {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
+            }
         })
         .manage(Mutex::new(clipboard::Clipboard::default()))
         .manage(clipboard::TransferControlState::default())
@@ -90,6 +109,10 @@ fn main() {
             default_manager::is_default_file_manager,
             default_manager::set_as_default_file_manager,
             default_manager::unset_as_default_file_manager,
+            default_manager::is_autostart_enabled,
+            default_manager::set_autostart_enabled,
+            default_manager::is_background_resident_enabled,
+            default_manager::set_background_resident_enabled,
             hotkey::is_win_e_interception_enabled,
             hotkey::set_win_e_interception_enabled,
             dialog_companion::sync_active_folder,

@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
-static WIN_E_ENABLED: AtomicBool = AtomicBool::new(false);
+static WIN_E_ENABLED: AtomicBool = AtomicBool::new(true);
 static WIN_KEY_DOWN: AtomicBool = AtomicBool::new(false);
 static CTRL_KEY_DOWN: AtomicBool = AtomicBool::new(false);
 static APP_HANDLE: Mutex<Option<tauri::AppHandle>> = Mutex::new(None);
@@ -112,7 +112,10 @@ pub fn init_hotkey_listener(app: tauri::AppHandle) {
             .unwrap_or_default();
         if config_file.exists() {
             if let Ok(content) = std::fs::read_to_string(&config_file) {
-                if content.trim() == "1" || content.trim() == "true" {
+                let trimmed = content.trim();
+                if trimmed == "0" || trimmed == "false" {
+                    WIN_E_ENABLED.store(false, Ordering::SeqCst);
+                } else {
                     WIN_E_ENABLED.store(true, Ordering::SeqCst);
                 }
             }

@@ -333,14 +333,17 @@ export default function ActionBar(p: ActionBarProps) {
                 <div key="folder" className="mb-1 border-b border-[#3d3d3d] pb-1">
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2.5 rounded-[4px] px-2.5 py-[5px] text-left text-[12.5px] text-[#eaeaea] hover:bg-[#3d3d3d]"
+                    className="flex w-full items-center justify-between rounded-[4px] px-2.5 py-[5px] text-left text-[12.5px] text-[#eaeaea] hover:bg-[#3d3d3d]"
                     onClick={() => {
                       setNewOpen(false);
                       p.onNewFolder();
                     }}
                   >
-                    <FolderPlus size={15} className="shrink-0 text-white" />
-                    <span>Folder</span>
+                    <div className="flex items-center gap-2.5">
+                      <FolderPlus size={15} className="shrink-0 text-white" />
+                      <span>Folder</span>
+                    </div>
+                    <span className="text-[11px] text-neutral-400">Ctrl+Shift+N</span>
                   </button>
                 </div>
               ) : (

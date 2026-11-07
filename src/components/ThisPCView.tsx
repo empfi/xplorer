@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Drive, FsEntry } from "../types";
 import { api, onDrivesChanged } from "../api";
 import EntryIcon from "./EntryIcon";
+import { acceptsFileDrop, extractDropItems } from "../dragDrop";
 
 /** Parse human bytes back to a number for capacity bars ("57,3 GB" -> bytes). */
 function parseBytes(human: string): number {
@@ -64,6 +65,7 @@ interface Props {
   /** Bump to refetch drives + hosts (F5 / refresh button). */
   refreshSignal?: number;
   onOpen: (path: string) => void;
+  onOpenNewTab?: (path: string) => void;
   onBackgroundMenu: (e: React.MouseEvent) => void;
   onEntryMenu?: (e: React.MouseEvent, entry: FsEntry) => void;
   onWarmEntryMenu?: (entry: FsEntry, shiftKey: boolean) => void;
@@ -79,6 +81,7 @@ export default function ThisPCView({
   zoom = 1,
   refreshSignal = 0,
   onOpen,
+  onOpenNewTab,
   onBackgroundMenu,
   onEntryMenu,
   onWarmEntryMenu,
@@ -182,19 +185,13 @@ export default function ThisPCView({
   const acceptsDrop = useCallback(
     (ev: React.DragEvent) => {
       if (!onDropInto) return false;
-      const types = Array.from(ev.dataTransfer.types);
-      return types.includes("application/x-file-paths") || types.includes("Files");
+      return acceptsFileDrop(ev);
     },
     [onDropInto],
   );
 
   const dropItems = useCallback((ev: React.DragEvent): string[] => {
-    try {
-      const arr = JSON.parse(ev.dataTransfer.getData("application/x-file-paths")) as string[];
-      return Array.isArray(arr) ? arr : [];
-    } catch {
-      return [];
-    }
+    return extractDropItems(ev);
   }, []);
 
   const dropEnabled = !!onDropInto;
@@ -204,7 +201,7 @@ export default function ThisPCView({
       ? (ev: React.DragEvent) => {
           if (!acceptsDrop(ev)) return;
           ev.preventDefault();
-          ev.dataTransfer.dropEffect = "move";
+          ev.dataTransfer.dropEffect = "copy";
           setDragOver(target);
         }
       : undefined,
@@ -228,9 +225,18 @@ export default function ThisPCView({
         key={k}
         data-path={e.path}
         onMouseDown={(ev) => {
-          if (ev.button === 2) {
+          if (ev.button === 1) {
+            ev.preventDefault();
+          } else if (ev.button === 2) {
             setSelected(k);
             onWarmEntryMenu?.(e, ev.shiftKey);
+          }
+        }}
+        onAuxClick={(ev) => {
+          if (ev.button === 1) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            (onOpenNewTab ?? onOpen)(e.path);
           }
         }}
         onClick={(ev) => {
@@ -247,7 +253,7 @@ export default function ThisPCView({
         {...rowDrop(e.path)}
         className={`flex cursor-default items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
           isSel ? "bg-[#3b3b3b] text-white" : "text-neutral-300 hover:bg-[#2d2d2d]"
-        } ${dragOver === e.path ? "bg-[#323232] ring-2 ring-[#0078d4]" : ""}`}
+        } ${dragOver === e.path ? "bg-[#323232]" : ""}`}
       >
         <EntryIcon entry={e} size={Math.round(20 * zoom)} perPath className="shrink-0" />
         <span className="min-w-0 flex-1 truncate">{e.name}</span>
@@ -293,9 +299,18 @@ export default function ThisPCView({
         key={k}
         data-path={e.path}
         onMouseDown={(ev) => {
-          if (ev.button === 2) {
+          if (ev.button === 1) {
+            ev.preventDefault();
+          } else if (ev.button === 2) {
             setSelected(k);
             onWarmEntryMenu?.(e, ev.shiftKey);
+          }
+        }}
+        onAuxClick={(ev) => {
+          if (ev.button === 1) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            (onOpenNewTab ?? onOpen)(e.path);
           }
         }}
         onClick={(ev) => {
@@ -312,7 +327,7 @@ export default function ThisPCView({
         {...rowDrop(e.path)}
         className={`flex cursor-default items-center gap-3 self-start rounded-lg px-3 py-2.5 transition-colors ${
           isSel ? "bg-[#3b3b3b]" : "hover:bg-[#2d2d2d]"
-        } ${dragOver === e.path ? "bg-[#323232] ring-2 ring-[#0078d4]" : ""}`}
+        } ${dragOver === e.path ? "bg-[#323232]" : ""}`}
       >
         <EntryIcon entry={e} size={Math.round(40 * zoom)} perPath className="shrink-0" />
         <span className="flex min-w-0 flex-1 flex-col">

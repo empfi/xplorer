@@ -932,6 +932,8 @@ fn list_network_hosts_sync() -> Result<Vec<crate::commands::fs_ops::FsEntry>, St
             size: String::new(),
             item_type: category,
             modified: String::new(),
+            is_admin: false,
+            is_shortcut: false,
         });
     }
     Ok(entries)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Plus,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { MenuItem } from "./ContextMenu";
 import EntryIcon from "./EntryIcon";
+import { acceptsFileDrop, extractDropItems } from "../dragDrop";
 
 const VIRTUAL_LABELS: Record<string, string> = {
   "shell:ThisPC": "This PC",
@@ -48,7 +49,6 @@ export default function TabBar({
   onContextMenu,
   onDropIntoTab,
 }: Props) {
-  const [dragOverTab, setDragOverTab] = useState<number | null>(null);
   const [maximized, setMaximized] = useState(false);
   const win =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
@@ -123,34 +123,39 @@ export default function TabBar({
                   },
                 ]);
               }}
-              onDragOver={(ev) => {
-                const types = Array.from(ev.dataTransfer.types);
-                if (!types.includes("application/x-file-paths") && !types.includes("Files")) return;
-                ev.preventDefault();
-                ev.dataTransfer.dropEffect = "move";
-                setDragOverTab(t.id);
+              onDragEnter={(ev) => {
+                if (!acceptsFileDrop(ev)) return;
                 if (!isActive) onSelect(t.id);
               }}
-              onDragLeave={() => setDragOverTab((p) => (p === t.id ? null : p))}
+              onDragOver={(ev) => {
+                if (!acceptsFileDrop(ev)) return;
+                ev.preventDefault();
+                ev.dataTransfer.dropEffect = "copy";
+                if (!isActive) onSelect(t.id);
+              }}
               onDrop={(ev) => {
                 ev.preventDefault();
-                setDragOverTab(null);
-                if (isActive || !onDropIntoTab) return;
-                try {
-                  const arr = JSON.parse(
-                    ev.dataTransfer.getData("application/x-file-paths"),
-                  ) as string[];
-                  if (Array.isArray(arr) && arr.length) onDropIntoTab(t.path, arr);
-                } catch {
-                  /* ignore */
+                ev.stopPropagation();
+                if (!onDropIntoTab) return;
+                const items = extractDropItems(ev);
+                if (!items.length) return;
+
+                const normTarget = t.path.replace(/[\\/]+$/, "").toLowerCase();
+                const itemsToMove = items.filter((p) => {
+                  const normP = p.replace(/[\\/]+$/, "").toLowerCase();
+                  if (normP === normTarget) return false;
+                  const parent = normP.replace(/[\\/][^\\/]+$/, "");
+                  return parent !== normTarget;
+                });
+
+                if (itemsToMove.length) {
+                  onDropIntoTab(t.path, itemsToMove);
                 }
               }}
               className={`group flex h-full max-w-[235px] min-w-[120px] shrink cursor-default items-center gap-2 rounded-t-lg px-3 text-[12.5px] transition-colors ${
                 isActive
                   ? "bg-[#191919] text-white"
-                  : dragOverTab === t.id
-                    ? "bg-[#323232] text-white ring-1 ring-inset ring-[#0078d4]"
-                    : "bg-transparent text-neutral-400 hover:bg-[#1a1a1a] hover:text-neutral-200"
+                  : "bg-transparent text-neutral-400 hover:bg-[#1a1a1a] hover:text-neutral-200"
               }`}
             >
               {t.loading ? (

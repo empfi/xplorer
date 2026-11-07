@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { MenuGroup } from "./ContextMenu";
 import EntryIcon from "./EntryIcon";
+import { acceptsFileDrop, extractDropItems } from "../dragDrop";
 
 export const QUICK_ICONS: Record<string, LucideIcon> = {
   Home,
@@ -219,24 +220,15 @@ export default function Sidebar({
     ev.dataTransfer.setData("application/x-quick-link", path);
   };
 
-  const isFileDrag = (ev: React.DragEvent) =>
-    Array.from(ev.dataTransfer.types).includes("application/x-file-paths") ||
-    Array.from(ev.dataTransfer.types).includes("Files");
+  const isFileDrag = (ev: React.DragEvent) => acceptsFileDrop(ev);
 
-  const dropFileItems = (ev: React.DragEvent): string[] => {
-    try {
-      const arr = JSON.parse(ev.dataTransfer.getData("application/x-file-paths")) as string[];
-      return Array.isArray(arr) ? arr : [];
-    } catch {
-      return [];
-    }
-  };
+  const dropFileItems = (ev: React.DragEvent): string[] => extractDropItems(ev);
 
   const onDragOverLink = (path: string) => (ev: React.DragEvent) => {
     if (isFileDrag(ev)) {
       if (!onDropInto) return;
       ev.preventDefault();
-      ev.dataTransfer.dropEffect = "move";
+      ev.dataTransfer.dropEffect = "copy";
       setOverPath(path);
       return;
     }
@@ -365,10 +357,19 @@ export default function Sidebar({
                     isOver
                       ? draggedRef.current
                         ? "border-t-2 border-[#0078d4]"
-                        : "ring-2 ring-[#0078d4]"
+                        : "bg-[#2f2f2f] text-white"
                       : "border-t-2 border-transparent"
                   }`}
                   onClick={() => onNavigate(q.path)}
+                  onMouseDown={(e) => {
+                    if (e.button === 1) e.preventDefault();
+                  }}
+                  onAuxClick={(e) => {
+                    if (e.button === 1) {
+                      e.preventDefault();
+                      onOpenNewTab(q.path);
+                    }
+                  }}
                 >
                   <EntryIcon entry={entry} size={16} perPath className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{q.name}</span>
@@ -386,6 +387,15 @@ export default function Sidebar({
           aria-expanded={pcOpen}
           tabIndex={0}
           onClick={() => onNavigate("shell:ThisPC")}
+          onMouseDown={(e) => {
+            if (e.button === 1) e.preventDefault();
+          }}
+          onAuxClick={(e) => {
+            if (e.button === 1) {
+              e.preventDefault();
+              onOpenNewTab("shell:ThisPC");
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
@@ -477,9 +487,18 @@ export default function Sidebar({
                 <button
                   type="button"
                   onClick={() => onNavigate(d.path)}
+                  onMouseDown={(e) => {
+                    if (e.button === 1) e.preventDefault();
+                  }}
+                  onAuxClick={(e) => {
+                    if (e.button === 1) {
+                      e.preventDefault();
+                      onOpenNewTab(d.path);
+                    }
+                  }}
                   data-tooltip={`${label}${d.total ? ` - ${d.free} free of ${d.total}` : ""}`}
                   className={`${itemCls(d.path, true)} ${
-                    isOver ? "ring-2 ring-[#0078d4]" : ""
+                    isOver ? "bg-[#2f2f2f] text-white" : ""
                   }`}
                 >
                   <EntryIcon entry={entry} size={16} perPath className="shrink-0" />
@@ -495,6 +514,15 @@ export default function Sidebar({
         <button
           type="button"
           onClick={() => onNavigate("shell:RecycleBinFolder")}
+          onMouseDown={(e) => {
+            if (e.button === 1) e.preventDefault();
+          }}
+          onAuxClick={(e) => {
+            if (e.button === 1) {
+              e.preventDefault();
+              onOpenNewTab("shell:RecycleBinFolder");
+            }
+          }}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();

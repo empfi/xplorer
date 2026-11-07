@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   FolderSymlink,
   Monitor,
+  Power,
   Settings,
   X,
   Zap,
@@ -17,13 +18,14 @@ interface Props {
 
 export default function SettingsDialog({ open, onClose, showToast }: Props) {
   const [isDefault, setIsDefault] = useState(false);
-  const [winEEnabled, setWinEEnabled] = useState(false);
-  const [companionEnabled, setCompanionEnabled] = useState(true);
-  const [autoJumpEnabled, setAutoJumpEnabled] = useState(true);
+  const [autostartEnabled, setAutostartEnabled] = useState(false);
+  const [backgroundEnabled, setBackgroundEnabled] = useState(true);
+  const [winEEnabled, setWinEEnabled] = useState(true);
+  const [companionEnabled, setCompanionEnabled] = useState(false);
   const [loadingDefault, setLoadingDefault] = useState(false);
+  const [loadingAutostart, setLoadingAutostart] = useState(false);
   const [loadingWinE, setLoadingWinE] = useState(false);
   const [loadingCompanion, setLoadingCompanion] = useState(false);
-  const [loadingAutoJump, setLoadingAutoJump] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -41,6 +43,14 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
       .then(setIsDefault)
       .catch((err) => console.error("isDefaultFileManager error:", err));
     api
+      .isAutostartEnabled()
+      .then(setAutostartEnabled)
+      .catch((err) => console.error("isAutostartEnabled error:", err));
+    api
+      .isBackgroundResidentEnabled()
+      .then(setBackgroundEnabled)
+      .catch((err) => console.error("isBackgroundResidentEnabled error:", err));
+    api
       .isWinEInterceptionEnabled()
       .then(setWinEEnabled)
       .catch((err) => console.error("isWinEInterceptionEnabled error:", err));
@@ -48,10 +58,6 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
       .isDialogCompanionEnabled()
       .then(setCompanionEnabled)
       .catch((err) => console.error("isDialogCompanionEnabled error:", err));
-    api
-      .isAutoJumpEnabled()
-      .then(setAutoJumpEnabled)
-      .catch((err) => console.error("isAutoJumpEnabled error:", err));
   }, [open]);
 
   if (!open) return null;
@@ -65,13 +71,39 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
         showToast("Restored native Windows Explorer as default.");
       } else {
         await api.setAsDefaultFileManager();
+        await api.setAutostartEnabled(true);
+        await api.setBackgroundResidentEnabled(true);
+        await api.setWinEInterceptionEnabled(true);
         setIsDefault(true);
-        showToast("Xplorer set as default file manager for folders & drives.");
+        setAutostartEnabled(true);
+        setBackgroundEnabled(true);
+        setWinEEnabled(true);
+        showToast("Xplorer set as default file manager with Win+E and background startup.");
       }
     } catch (err) {
       showToast(String(err));
     } finally {
       setLoadingDefault(false);
+    }
+  };
+
+  const toggleAutostartAndBackground = async () => {
+    setLoadingAutostart(true);
+    const next = !(autostartEnabled && backgroundEnabled);
+    try {
+      await api.setAutostartEnabled(next);
+      await api.setBackgroundResidentEnabled(next);
+      setAutostartEnabled(next);
+      setBackgroundEnabled(next);
+      showToast(
+        next
+          ? "Xplorer will start with Windows and stay active in the background."
+          : "Background resident mode & Windows startup disabled.",
+      );
+    } catch (err) {
+      showToast(String(err));
+    } finally {
+      setLoadingAutostart(false);
     }
   };
 
@@ -108,24 +140,6 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
       showToast(String(err));
     } finally {
       setLoadingCompanion(false);
-    }
-  };
-
-  const toggleAutoJump = async () => {
-    setLoadingAutoJump(true);
-    const next = !autoJumpEnabled;
-    try {
-      await api.setAutoJumpEnabled(next);
-      setAutoJumpEnabled(next);
-      showToast(
-        next
-          ? "File dialogs will auto-jump to your current folder."
-          : "Auto-jump disabled. Use Ctrl+G to jump manually.",
-      );
-    } catch (err) {
-      showToast(String(err));
-    } finally {
-      setLoadingAutoJump(false);
     }
   };
 
@@ -203,6 +217,42 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
               </div>
             </div>
 
+            {/* Start with Windows & Keep in Background Card */}
+            <div className="flex flex-col gap-2.5 rounded-lg border border-[#333] bg-[#191919] p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">Start with Windows & Stay Ready</span>
+                    {autostartEnabled && backgroundEnabled && (
+                      <span className="flex items-center gap-1 rounded bg-emerald-950/80 px-2 py-0.5 text-[11px] font-medium text-emerald-300 border border-emerald-800">
+                        <Power size={11} /> Always Ready
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11.5px] text-neutral-400 leading-relaxed">
+                    Launches silently at Windows login and hides to the background when closed so{" "}
+                    <kbd className="rounded bg-[#2a2a2a] px-1 py-0.5 font-mono text-neutral-200 text-[10.5px]">Win+E</kbd> and
+                    folder opens are instant.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={loadingAutostart}
+                  onClick={toggleAutostartAndBackground}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    autostartEnabled && backgroundEnabled ? "bg-[#0078d4]" : "bg-[#333333]"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      autostartEnabled && backgroundEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
             {/* Win + E Interception Card */}
             <div className="flex flex-col gap-2.5 rounded-lg border border-[#333] bg-[#191919] p-3.5">
               <div className="flex items-center justify-between gap-3">
@@ -267,40 +317,6 @@ export default function SettingsDialog({ open, onClose, showToast }: Props) {
                   <span
                     className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                       companionEnabled ? "translate-x-5" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* Auto-Jump File Dialogs Card */}
-            <div className="flex flex-col gap-2.5 rounded-lg border border-[#333] bg-[#191919] p-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white">Auto-Jump Open/Save Dialogs</span>
-                    {autoJumpEnabled && (
-                      <span className="flex items-center gap-1 rounded bg-emerald-950/80 px-2 py-0.5 text-[11px] font-medium text-emerald-300 border border-emerald-800">
-                        <Zap size={11} /> Auto
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11.5px] text-neutral-400 leading-relaxed">
-                    Whenever an Open or Save file dialog appears on your PC, automatically navigate it directly to your currently active Xplorer directory.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={loadingAutoJump}
-                  onClick={toggleAutoJump}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    autoJumpEnabled ? "bg-[#0078d4]" : "bg-[#333333]"
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      autoJumpEnabled ? "translate-x-5" : "translate-x-0"
                     }`}
                   />
                 </button>

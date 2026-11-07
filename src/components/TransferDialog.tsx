@@ -98,16 +98,17 @@ export default function TransferDialog({ standalone = false }: Props) {
     } catch {}
   };
 
-  const getTargetHeight = (details: boolean, opType?: string) => {
+  const getTargetHeight = (details: boolean, opType?: string, hasError?: boolean) => {
+    if (hasError) return 210;
     if (!details) return 155;
     if (opType === "delete" || opType === "restore") return 240;
     return 320;
   };
 
-  const updateWindowHeight = (details: boolean, opType?: string) => {
+  const updateWindowHeight = (details: boolean, opType?: string, hasError?: boolean) => {
     if (!standalone || !appWindow.current) return;
     try {
-      const targetHeight = getTargetHeight(details, opType);
+      const targetHeight = getTargetHeight(details, opType, hasError);
       appWindow.current.setSize(new LogicalSize(440, targetHeight)).catch(() => {});
     } catch {}
   };
@@ -135,22 +136,24 @@ export default function TransferDialog({ standalone = false }: Props) {
 
       if (standalone && appWindow.current) {
         positionAtBottomRight();
-        updateWindowHeight(showDetails, p.op_type);
+        updateWindowHeight(showDetails, p.op_type, !!p.error);
         appWindow.current.show().catch(() => {});
       }
 
       if (p.done) {
         setIsCanceling(false);
-        closeTimerRef.current = window.setTimeout(() => {
-          if (standalone && appWindow.current) {
-            appWindow.current.hide().catch(() => {});
-          } else {
-            setVisible(false);
-          }
-          setSpeedHistory([]);
-          setPosition(null);
-          hasPositionedRef.current = false;
-        }, 2200);
+        if (!p.error) {
+          closeTimerRef.current = window.setTimeout(() => {
+            if (standalone && appWindow.current) {
+              appWindow.current.hide().catch(() => {});
+            } else {
+              setVisible(false);
+            }
+            setSpeedHistory([]);
+            setPosition(null);
+            hasPositionedRef.current = false;
+          }, 2200);
+        }
       }
     });
   }, [standalone, showDetails]);

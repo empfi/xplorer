@@ -9,8 +9,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IsWindowVisible, PostMessageW, SendMessageW, WM_KEYDOWN, WM_KEYUP, WM_SETTEXT,
 };
 
-static COMPANION_ENABLED: AtomicBool = AtomicBool::new(true);
-static AUTO_JUMP_ENABLED: AtomicBool = AtomicBool::new(true);
+static COMPANION_ENABLED: AtomicBool = AtomicBool::new(false);
+static AUTO_JUMP_ENABLED: AtomicBool = AtomicBool::new(false);
 static ACTIVE_FOLDER: Mutex<String> = Mutex::new(String::new());
 static RECENT_TABS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static LAST_HANDLED_DIALOG: Mutex<Option<usize>> = Mutex::new(None);
@@ -187,6 +187,16 @@ pub fn quick_switch_file_dialog() -> Result<bool, String> {
 
 /// Spawns the background monitor that listens for file dialogs appearing.
 pub fn start_dialog_companion_watcher(app_handle: tauri::AppHandle) {
+    if let Some(dir) = dirs::config_dir().map(|d| d.join("xplorer")) {
+        let config_file = dir.join("companion_enabled");
+        if config_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&config_file) {
+                let trimmed = content.trim();
+                COMPANION_ENABLED.store(trimmed == "1" || trimmed == "true", Ordering::SeqCst);
+            }
+        }
+    }
+
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(350));
@@ -226,15 +236,6 @@ pub fn start_dialog_companion_watcher(app_handle: tauri::AppHandle) {
                                 "tabs": tabs,
                             }),
                         );
-
-                        // If auto-jump is enabled and we have a valid folder, navigate immediately!
-                        if AUTO_JUMP_ENABLED.load(Ordering::Relaxed) {
-                            if !active.is_empty() && std::path::Path::new(&active).is_dir() {
-                                // Small delay to let the dialog finish initial initialization
-                                std::thread::sleep(std::time::Duration::from_millis(150));
-                                navigate_dialog_to_dir(fg, &active);
-                            }
-                        }
                     }
                 } else {
                     let mut last = LAST_HANDLED_DIALOG.lock().unwrap();

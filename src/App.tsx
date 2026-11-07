@@ -31,6 +31,7 @@ import PreviewPane from "./components/PreviewPane";
 import SettingsDialog from "./components/SettingsDialog";
 import FileDialogCompanion from "./components/FileDialogCompanion";
 import TransferDialog from "./components/TransferDialog";
+import DeleteErrorDialog, { type DeleteErrorInfo } from "./components/DeleteErrorDialog";
 import {
   AppWindow,
   Archive,
@@ -246,6 +247,8 @@ export default function App() {
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const renameTargetRef = useRef(renameTarget);
   renameTargetRef.current = renameTarget;
+  const typeaheadBufferRef = useRef("");
+  const typeaheadTimerRef = useRef(0);
 
   const [newItemPath, setNewItemPath] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -432,6 +435,7 @@ export default function App() {
   const visibleRef = useRef<FsEntry[]>([]);
   const clipRef = useRef<{ paths: string[]; mode: ClipboardMode }>({ paths: [], mode: "copy" });
   const toastTimer = useRef<number>(0);
+  const [deleteError, setDeleteError] = useState<DeleteErrorInfo | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -824,6 +828,22 @@ export default function App() {
     [active, activeNavigate, showToast],
   );
 
+  const openEntryInNewTab = useCallback(
+    (e: FsEntry) => {
+      if (isRecycle) return;
+      if (e.path.startsWith("upnp::")) {
+        api.openPath(e.path.slice("upnp::".length)).catch((err) => showToast(String(err)));
+        return;
+      }
+      if (e.is_dir) {
+        openTab(e.path);
+      } else {
+        api.openPath(e.path).catch((err) => showToast(String(err)));
+      }
+    },
+    [isRecycle, openTab, showToast],
+  );
+
   const goBack = useCallback(() => {
     if (!active || active.hIndex === 0) return;
     setSearchQuery("");
@@ -889,7 +909,7 @@ export default function App() {
         const prev = tab.selected;
         if (!pathSel) return { selected: new Set<string>() };
         const next = additive ? new Set(prev) : new Set<string>();
-        if (additive && prev.has(pathSel) && prev.size > 1) next.delete(pathSel);
+        if (additive && prev.has(pathSel)) next.delete(pathSel);
         else next.add(pathSel);
         return { selected: next };
       });
@@ -922,6 +942,17 @@ export default function App() {
         if (res && res.pairs && res.pairs.length > 0) {
           const pairs = res.pairs;
           const isCut = res.is_cut;
+          const pastedPaths = pairs.map(([, dst]) => dst);
+          if (pastedPaths.length > 0) {
+            setTab(active.id, { selected: new Set(pastedPaths) });
+            anchorRef.current = pastedPaths[0];
+            edgeRef.current = pastedPaths[pastedPaths.length - 1];
+            requestAnimationFrame(() => {
+              document
+                .querySelector(`[data-path="${CSS.escape(pastedPaths[0])}"]`)
+                ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            });
+          }
           pushHistory({
             label: isCut
               ? (pairs.length === 1 ? `Move "${pairs[0][0].split("\\").pop()}"` : `Move ${pairs.length} items`)
@@ -1013,14 +1044,18 @@ export default function App() {
   );
 
   const doDelete = useCallback(
-    (permanent = false) => {
+    (permanent = false, retryPaths?: string[]) => {
       if (!active) return;
-      const paths = [...active.selected];
+      const paths = retryPaths || [...active.selected];
       if (!paths.length) return;
-      setTab(active.id, { selected: new Set() });
+
+      const entries = visibleRef.current;
+      const firstIdx = entries.findIndex((e) => paths.includes(e.path));
+
       showStatus(`${permanent ? "Permanently deleting" : "Deleting"} ${paths.length} item(s)…`);
       const op = permanent ? api.deleteItemsPermanently(paths) : api.deleteItems(paths);
       op.then(() => {
+        setDeleteError(null);
         showToast(`${permanent ? "Permanently deleted" : "Deleted"} ${paths.length} item(s)`);
         if (!permanent) {
           pushHistory({
@@ -1033,9 +1068,34 @@ export default function App() {
             },
           });
         }
+        const remaining = entries.filter((e) => !paths.includes(e.path));
+        let nextSel = new Set<string>();
+        if (remaining.length > 0 && firstIdx >= 0) {
+          const nextIdx = Math.min(firstIdx, remaining.length - 1);
+          const nextTarget = remaining[nextIdx];
+          if (nextTarget) {
+            nextSel = new Set([nextTarget.path]);
+            anchorRef.current = nextTarget.path;
+            edgeRef.current = nextTarget.path;
+            requestAnimationFrame(() => {
+              document
+                .querySelector(`[data-path="${CSS.escape(nextTarget.path)}"]`)
+                ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            });
+          }
+        } else {
+          anchorRef.current = null;
+          edgeRef.current = null;
+        }
+        setTab(active.id, { selected: nextSel });
         refresh();
       }).catch((e) => {
-        showToast(String(e));
+        const errMsg = String(e?.message || e || "Failed to delete item(s)");
+        setDeleteError({
+          message: errMsg,
+          paths,
+          permanent,
+        });
         refresh();
       });
     },
@@ -1046,28 +1106,54 @@ export default function App() {
     (path: string | null) => {
       const p = path ?? newItemPath;
       if (!p) return;
-      api
-        .deleteItemsPermanently([p])
-        .then(refresh)
-        .catch(() => {});
       setNewItemPath(null);
     },
-    [newItemPath, refresh],
+    [newItemPath],
   );
 
   const doRename = useCallback(
-    (newName: string) => {
+    (newName: string, tabDirection?: -1 | 1) => {
       const target = renameTarget;
-      if (!target || !newName) {
-        if (newItemPath && !newName) doCancelNewItem(target ?? newItemPath);
-        setRenameTarget(null);
-        return;
-      }
+      if (!target) return;
       const wasNew = newItemPath === target;
       setNewItemPath(null);
       setRenameTarget(null);
+
       const oldName = target.split("\\").pop() ?? "";
-      if (newName === oldName) {
+      let resolvedNewName = (newName || "").trim();
+      if (!resolvedNewName) {
+        resolvedNewName = oldName;
+      }
+      if (oldName.toLowerCase().endsWith(".lnk") && !resolvedNewName.toLowerCase().endsWith(".lnk")) {
+        resolvedNewName = `${resolvedNewName}.lnk`;
+      }
+
+      const finishSelection = (finalPath: string) => {
+        if (active) {
+          setTab(active.id, { selected: new Set([finalPath]) });
+          anchorRef.current = finalPath;
+          edgeRef.current = finalPath;
+        }
+        if (tabDirection !== undefined) {
+          const list = visibleRef.current;
+          const idx = list.findIndex((e) => e.path === finalPath);
+          if (idx >= 0) {
+            const nextIdx = (idx + tabDirection + list.length) % list.length;
+            const nextEntry = list[nextIdx];
+            if (nextEntry) {
+              setRenameTarget(nextEntry.path);
+              if (active) {
+                setTab(active.id, { selected: new Set([nextEntry.path]) });
+                anchorRef.current = nextEntry.path;
+                edgeRef.current = nextEntry.path;
+              }
+            }
+          }
+        }
+      };
+
+      if (resolvedNewName === oldName) {
+        finishSelection(target);
         if (wasNew) {
           pushHistory({
             label: `New "${oldName}"`,
@@ -1081,14 +1167,35 @@ export default function App() {
         }
         return;
       }
+
       const parent = target.slice(0, target.lastIndexOf("\\"));
-      const renamedPath = `${parent}\\${newName}`;
+      const renamedPath = `${parent}\\${resolvedNewName}`;
+      if (active) {
+        setTab(active.id, (t) => ({
+          listing: {
+            ...t.listing,
+            entries: t.listing.entries.map((e) =>
+              e.path === target
+                ? {
+                    ...e,
+                    path: renamedPath,
+                    name: resolvedNewName,
+                  }
+                : e,
+            ),
+          },
+          selected: new Set([renamedPath]),
+        }));
+        anchorRef.current = renamedPath;
+        edgeRef.current = renamedPath;
+      }
+
       api
-        .renameItem(target, newName)
+        .renameItem(target, resolvedNewName)
         .then(() => {
           if (wasNew) {
             pushHistory({
-              label: `New "${newName}"`,
+              label: `New "${resolvedNewName}"`,
               undo: async () => {
                 await api.deleteItems([renamedPath]);
               },
@@ -1098,27 +1205,42 @@ export default function App() {
             });
           } else {
             pushHistory({
-              label: `Rename "${oldName}" → "${newName}"`,
+              label: `Rename "${oldName}" → "${resolvedNewName}"`,
               undo: async () => {
                 await api.renameItem(renamedPath, oldName);
               },
               redo: async () => {
-                await api.renameItem(target, newName);
+                await api.renameItem(target, resolvedNewName);
               },
             });
           }
           refresh();
+          finishSelection(renamedPath);
+          requestAnimationFrame(() => {
+            document
+              .querySelector(`[data-path="${CSS.escape(renamedPath)}"]`)
+              ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          });
         })
-        .catch((e) => showToast(String(e)));
+        .catch((e) => {
+          showToast(String(e));
+          refresh();
+          finishSelection(target);
+        });
     },
-    [renameTarget, newItemPath, doCancelNewItem, refresh, showToast, pushHistory],
+    [renameTarget, newItemPath, active, setTab, refresh, showToast, pushHistory],
   );
 
   const doCancelRename = useCallback(() => {
+    const target = renameTarget;
     setRenameTarget(null);
-    if (newItemPath) doCancelNewItem(newItemPath);
     setNewItemPath(null);
-  }, [newItemPath, doCancelNewItem]);
+    if (target && active) {
+      setTab(active.id, { selected: new Set([target]) });
+      anchorRef.current = target;
+      edgeRef.current = target;
+    }
+  }, [renameTarget, active, setTab]);
 
   const createInline = useCallback(
     (kind: "folder" | "txt") => {
@@ -1133,13 +1255,44 @@ export default function App() {
           : api.createEmptyFile(active.path, "New Text Document.txt");
       create
         .then((path) => {
-          refresh();
+          const name = path.split("\\").pop() ?? "";
+          const isDir = kind === "folder";
+          setTab(active.id, (t) => {
+            const exists = t.listing.entries.some((e) => e.path === path);
+            const nextEntries = exists
+              ? t.listing.entries
+              : [
+                  ...t.listing.entries,
+                  {
+                    name,
+                    path,
+                    is_dir: isDir,
+                    size: isDir ? "" : "0 bytes",
+                    modified: "Just now",
+                    item_type: isDir ? "File folder" : "Text Document",
+                    is_hidden: false,
+                    is_system: false,
+                  },
+                ];
+            return {
+              listing: { ...t.listing, entries: nextEntries },
+              selected: new Set([path]),
+            };
+          });
+          anchorRef.current = path;
+          edgeRef.current = path;
           setNewItemPath(path);
           setRenameTarget(path);
+          refresh();
+          requestAnimationFrame(() => {
+            document
+              .querySelector(`[data-path="${CSS.escape(path)}"]`)
+              ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          });
         })
         .catch((e) => showToast(String(e)));
     },
-    [active, refresh, showToast],
+    [active, refresh, setTab, showToast],
   );
 
   const createShellNewInline = useCallback(
@@ -1152,13 +1305,43 @@ export default function App() {
       api
         .createShellNewItem(active.path, ext, label)
         .then((path) => {
-          refresh();
+          const name = path.split("\\").pop() ?? "";
+          setTab(active.id, (t) => {
+            const exists = t.listing.entries.some((e) => e.path === path);
+            const nextEntries = exists
+              ? t.listing.entries
+              : [
+                  ...t.listing.entries,
+                  {
+                    name,
+                    path,
+                    is_dir: false,
+                    size: "0 bytes",
+                    modified: "Just now",
+                    item_type: label,
+                    is_hidden: false,
+                    is_system: false,
+                  },
+                ];
+            return {
+              listing: { ...t.listing, entries: nextEntries },
+              selected: new Set([path]),
+            };
+          });
+          anchorRef.current = path;
+          edgeRef.current = path;
           setNewItemPath(path);
           setRenameTarget(path);
+          refresh();
+          requestAnimationFrame(() => {
+            document
+              .querySelector(`[data-path="${CSS.escape(path)}"]`)
+              ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          });
         })
         .catch((e) => showToast(String(e)));
     },
-    [active, refresh, showToast],
+    [active, refresh, setTab, showToast],
   );
 
   const doRestore = useCallback(() => {
@@ -1363,8 +1546,18 @@ export default function App() {
             action: () => {
               api
                 .createShortcut(selectedPaths)
-                .then(() => {
+                .then((created) => {
                   showToast("Shortcut created");
+                  if (created && created.length && active) {
+                    setTab(active.id, { selected: new Set(created) });
+                    anchorRef.current = created[0];
+                    edgeRef.current = created[created.length - 1];
+                    requestAnimationFrame(() => {
+                      document
+                        .querySelector(`[data-path="${CSS.escape(created[0])}"]`)
+                        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                    });
+                  }
                   refresh();
                 })
                 .catch((e) => showToast(String(e)));
@@ -1559,20 +1752,23 @@ export default function App() {
     const folderItem: MenuItem = {
       label: "Folder",
       icon: FolderPlus,
+      shortcut: "Ctrl+Shift+N",
       action: () => createInline("folder"),
     };
+    const textDocItem: MenuItem = {
+      label: "Text Document",
+      icon: FileText,
+      action: () => createInline("txt"),
+    };
     const restItems: MenuItem[] = shellNewItems
-      .filter((e) => e.ext !== "")
+      .filter((e) => e.ext !== "" && e.ext.toLowerCase() !== "txt")
       .map((entry) => ({
         label: entry.label,
         iconUrl: entry.iconUrl,
         icon: entry.iconUrl ? undefined : FileText,
-        action: () => {
-          if (entry.ext === "txt") createInline("txt");
-          else createShellNewInline(entry.ext, entry.label);
-        },
+        action: () => createShellNewInline(entry.ext, entry.label),
       }));
-    return [{ items: [folderItem] }, { items: restItems }];
+    return [{ items: [folderItem, textDocItem] }, { items: restItems }];
   }, [shellNewItems, createInline, createShellNewInline]);
 
   const fetchAndCacheShellMenu = useCallback(
@@ -2084,7 +2280,19 @@ export default function App() {
               action: () =>
                 api
                   .createShortcut(targetPaths)
-                  .then(() => refresh())
+                  .then((created) => {
+                    if (created && created.length && active) {
+                      setTab(active.id, { selected: new Set(created) });
+                      anchorRef.current = created[0];
+                      edgeRef.current = created[created.length - 1];
+                      requestAnimationFrame(() => {
+                        document
+                          .querySelector(`[data-path="${CSS.escape(created[0])}"]`)
+                          ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                      });
+                    }
+                    refresh();
+                  })
                   .catch((err) => showToast(String(err))),
             },
             {
@@ -2253,7 +2461,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (menu) return;
       const tag = (e.target as HTMLElement)?.tagName;
-      if (e.key === "F3" || (e.ctrlKey && (e.key === "f" || e.key === "F"))) {
+      if (e.key === "F3" || (e.ctrlKey && (e.key === "f" || e.key === "F" || e.key === "e" || e.key === "E"))) {
         e.preventDefault();
         e.stopPropagation();
         setSearchQuery("");
@@ -2270,6 +2478,13 @@ export default function App() {
           setSearchQuery("");
           setSearchResults(null);
           setIsSearchingSubfolders(false);
+          return;
+        }
+        if (tag !== "INPUT" && tag !== "TEXTAREA" && active && active.selected.size > 0) {
+          e.preventDefault();
+          setTab(active.id, { selected: new Set() });
+          anchorRef.current = null;
+          edgeRef.current = null;
           return;
         }
       }
@@ -2336,7 +2551,7 @@ export default function App() {
         } as unknown as React.MouseEvent;
         showEntryMenu(fakeEvent, entry);
       } else if (
-        (e.key === "ArrowDown" || e.key === "ArrowUp") &&
+        (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") &&
         active &&
         !e.ctrlKey &&
         !e.altKey &&
@@ -2345,14 +2560,31 @@ export default function App() {
         e.preventDefault();
         const entries = visibleRef.current;
         if (!entries.length) return;
-        const dir = e.key === "ArrowDown" ? 1 : -1;
+
+        const isGrid = active.view === "grid";
+        let step = 1;
+        if (isGrid) {
+          if (e.key === "ArrowLeft") step = -1;
+          else if (e.key === "ArrowRight") step = 1;
+          else {
+            const container = document.querySelector("[data-fileview-container]");
+            const containerWidth = container ? container.clientWidth - 24 : 800;
+            const tileWidth = Math.round(104 * active.zoom) + 8;
+            const colsCount = Math.max(1, Math.floor(containerWidth / tileWidth));
+            step = e.key === "ArrowDown" ? colsCount : -colsCount;
+          }
+        } else {
+          step = (e.key === "ArrowLeft" || e.key === "ArrowUp") ? -1 : 1;
+        }
+
         const scrollTo = (t: FsEntry) => {
           requestAnimationFrame(() => {
             document
               .querySelector(`[data-path="${CSS.escape(t.path)}"]`)
-              ?.scrollIntoView({ block: "nearest" });
+              ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
           });
         };
+
         if (e.shiftKey) {
           let a = anchorRef.current
             ? entries.findIndex((en) => en.path === anchorRef.current)
@@ -2368,7 +2600,7 @@ export default function App() {
           const edge = edgeRef.current
             ? entries.findIndex((en) => en.path === edgeRef.current)
             : a;
-          const next = Math.min(entries.length - 1, Math.max(0, (edge < 0 ? a : edge) + dir));
+          const next = Math.min(entries.length - 1, Math.max(0, (edge < 0 ? a : edge) + step));
           edgeRef.current = entries[next].path;
           const range = entries
             .slice(Math.min(a, next), Math.max(a, next) + 1)
@@ -2380,11 +2612,9 @@ export default function App() {
             active.selected.size === 1
               ? entries.findIndex((en) => en.path === [...active.selected][0])
               : -1;
-          const next =
-            e.key === "ArrowDown"
-              ? Math.min(entries.length - 1, cur + 1)
-              : Math.max(0, cur <= 0 ? 0 : cur - 1);
-          const target = entries[cur === -1 && e.key === "ArrowUp" ? entries.length - 1 : next];
+          let next = cur === -1 ? (step > 0 ? 0 : entries.length - 1) : cur + step;
+          next = Math.min(entries.length - 1, Math.max(0, next));
+          const target = entries[next];
           if (target) {
             setTab(active.id, { selected: new Set([target.path]) });
             anchorRef.current = target.path;
@@ -2392,6 +2622,87 @@ export default function App() {
             scrollTo(target);
           }
         }
+      } else if (
+        (e.key === "PageDown" || e.key === "PageUp") &&
+        active &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey
+      ) {
+        e.preventDefault();
+        const entries = visibleRef.current;
+        if (!entries.length) return;
+        const pageSize = 12;
+        const step = e.key === "PageDown" ? pageSize : -pageSize;
+        const cur =
+          active.selected.size === 1
+            ? entries.findIndex((en) => en.path === [...active.selected][0])
+            : -1;
+        const next = Math.min(entries.length - 1, Math.max(0, (cur === -1 ? 0 : cur) + step));
+        const target = entries[next];
+        if (target) {
+          setTab(active.id, { selected: new Set([target.path]) });
+          anchorRef.current = target.path;
+          edgeRef.current = target.path;
+          requestAnimationFrame(() => {
+            document
+              .querySelector(`[data-path="${CSS.escape(target.path)}"]`)
+              ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          });
+        }
+      } else if (
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey &&
+        e.key.length === 1 &&
+        !e.isComposing &&
+        tag !== "INPUT" &&
+        tag !== "TEXTAREA" &&
+        active
+      ) {
+        const ch = e.key.toLowerCase();
+        window.clearTimeout(typeaheadTimerRef.current);
+        typeaheadTimerRef.current = window.setTimeout(() => {
+          typeaheadBufferRef.current = "";
+        }, 800);
+
+        const prevBuf = typeaheadBufferRef.current;
+        const isRepeat = prevBuf.length === 1 && prevBuf === ch;
+        if (!isRepeat) {
+          typeaheadBufferRef.current += ch;
+        }
+        const q = typeaheadBufferRef.current.toLowerCase();
+        const entries = visibleRef.current;
+        if (!entries.length) return;
+
+        let target: FsEntry | undefined;
+        if (isRepeat) {
+          const matches = entries.filter((en) => en.name.toLowerCase().startsWith(ch));
+          if (matches.length > 0) {
+            const currentSelPath = [...active.selected][0];
+            const currentMatchIdx = matches.findIndex((en) => en.path === currentSelPath);
+            const nextMatchIdx = (currentMatchIdx + 1) % matches.length;
+            target = matches[nextMatchIdx];
+          }
+        } else {
+          target =
+            entries.find((en) => en.name.toLowerCase().startsWith(q)) ??
+            entries.find((en) => en.name.toLowerCase().includes(q));
+        }
+
+        if (target) {
+          e.preventDefault();
+          setTab(active.id, { selected: new Set([target.path]) });
+          anchorRef.current = target.path;
+          edgeRef.current = target.path;
+          const tgt = target;
+          requestAnimationFrame(() => {
+            document
+              .querySelector(`[data-path="${CSS.escape(tgt.path)}"]`)
+              ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          });
+        }
+        return;
       } else if (e.key === "Delete") {
         e.preventDefault();
         if (isRecycle || e.shiftKey) doDelete(true);
@@ -2672,6 +2983,7 @@ export default function App() {
         onUp={goUp}
         onRefresh={refresh}
         onNavigate={(p) => activeNavigate(p)}
+        onOpenNewTab={(p) => openTab(p)}
         query={searchQuery}
         onQuery={setSearchQuery}
         loading={active.loading || active.bgLoading}
@@ -2769,6 +3081,7 @@ export default function App() {
               refreshSignal={pcRefresh}
               onBgLoadingChange={reportPcLoading}
               onOpen={(p) => activeNavigate(p)}
+              onOpenNewTab={(p) => openTab(p)}
               onBackgroundMenu={showBackgroundMenu}
               onEntryMenu={showEntryMenu}
               onWarmEntryMenu={(entry, shift) => fetchAndCacheShellMenu([entry], shift)}
@@ -2800,11 +3113,13 @@ export default function App() {
               sortDir={sort.dir}
               onSort={onSort}
               onOpen={openEntry}
+              onMiddleClick={openEntryInNewTab}
               onContextMenu={showEntryMenu}
               onWarmContextMenu={warmEntryMenu}
               renamingPath={renameTarget}
               onRenameConfirm={doRename}
               onRenameCancel={doCancelRename}
+              onStartRename={(path) => setRenameTarget(path)}
               onDropInto={doDropInto}
             />
           )}
@@ -2941,6 +3256,18 @@ export default function App() {
         activePath={active.path}
         tabs={tabs}
         showToast={showToast}
+      />
+
+      <DeleteErrorDialog
+        error={deleteError}
+        onRetry={() => {
+          if (deleteError) {
+            const { permanent, paths } = deleteError;
+            setDeleteError(null);
+            doDelete(permanent, paths);
+          }
+        }}
+        onCancel={() => setDeleteError(null)}
       />
 
       {toast && (

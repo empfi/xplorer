@@ -6,6 +6,8 @@ export interface FsEntry {
   size: string; // human-readable, "" for dirs
   item_type: string; // "File folder" / "PNG File" / "WinRAR ZIP archive" etc.
   modified: string; // formatted date
+  is_admin?: boolean;
+  is_shortcut?: boolean;
 }
 
 export interface Drive {

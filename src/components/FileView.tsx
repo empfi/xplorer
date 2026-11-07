@@ -1,9 +1,17 @@
 import React, { memo, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import type { FsEntry, GroupByKey, SortKey } from "../types";
 import { api } from "../api";
-import { startDrag } from "@crabnebula/tauri-plugin-drag";
-import EntryIcon from "./EntryIcon";
+import EntryIcon, { getCachedIconUrl, resolveEntryIconUrl } from "./EntryIcon";
+import {
+  acceptsFileDrop,
+  clearGlobalDragPayload,
+  extractDropItems,
+  generateDragImage,
+  setGlobalDragPayload,
+} from "../dragDrop";
 
 let cachedDragIconPath = "";
 api.getDragIconPath().then((p) => {
@@ -30,11 +38,13 @@ interface Props {
   sortDir?: 1 | -1;
   onSort?: (key: SortKey) => void;
   onOpen: (entry: FsEntry) => void;
+  onMiddleClick?: (entry: FsEntry) => void;
   onContextMenu: (e: React.MouseEvent, entry: FsEntry | null) => void;
   onWarmContextMenu?: (entry: FsEntry, shiftKey: boolean) => void;
   renamingPath?: string | null;
-  onRenameConfirm: (newName: string) => void;
+  onRenameConfirm: (newName: string, tabDirection?: -1 | 1) => void;
   onRenameCancel: () => void;
+  onStartRename?: (path: string) => void;
   onDropInto?: (targetDirPath: string, items: string[]) => void;
 }
 
@@ -48,6 +58,7 @@ interface RowCtx {
   onSelect: (path: string, additive: boolean) => void;
   onShiftSelect?: (path: string, additive: boolean) => void;
   onOpen: (entry: FsEntry) => void;
+  onMiddleClick?: (entry: FsEntry) => void;
   onContextMenu: (e: React.MouseEvent, entry: FsEntry) => void;
   onWarmContextMenu?: (entry: FsEntry, shiftKey: boolean) => void;
   setDragPayload: (ev: React.DragEvent, path: string) => void;
@@ -56,6 +67,14 @@ interface RowCtx {
   onDropInto?: (targetDirPath: string, items: string[]) => void;
   setDragOverPath: React.Dispatch<React.SetStateAction<string | null>>;
   rename: (entry: FsEntry) => React.ReactNode;
+  onStartRename?: (path: string) => void;
+}
+
+export function displayNameOf(name: string): string {
+  if (name.toLowerCase().endsWith(".lnk")) {
+    return name.slice(0, -4);
+  }
+  return name;
 }
 
 function getRelativeFolder(entryPath: string, currentPath?: string): string | null {
@@ -91,13 +110,15 @@ function rowEqual(
     prev.ctx.onSelect === next.ctx.onSelect &&
     prev.ctx.onShiftSelect === next.ctx.onShiftSelect &&
     prev.ctx.onOpen === next.ctx.onOpen &&
+    prev.ctx.onMiddleClick === next.ctx.onMiddleClick &&
     prev.ctx.onContextMenu === next.ctx.onContextMenu &&
     prev.ctx.onWarmContextMenu === next.ctx.onWarmContextMenu &&
     prev.ctx.setDragPayload === next.ctx.setDragPayload &&
     prev.ctx.acceptsDrop === next.ctx.acceptsDrop &&
     prev.ctx.dropItems === next.ctx.dropItems &&
     prev.ctx.onDropInto === next.ctx.onDropInto &&
-    prev.ctx.setDragOverPath === next.ctx.setDragOverPath
+    prev.ctx.setDragOverPath === next.ctx.setDragOverPath &&
+    prev.ctx.onStartRename === next.ctx.onStartRename
   );
 }
 
@@ -145,6 +166,7 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
     onSelect,
     onShiftSelect,
     onOpen,
+    onMiddleClick,
     onContextMenu,
     onWarmContextMenu,
     setDragPayload,
@@ -153,7 +175,9 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
     onDropInto,
     setDragOverPath,
     rename,
+    onStartRename,
   } = ctx;
+  const lastClickTimeRef = useRef(0);
   const isSel = selected.has(e.path);
   const isCut = cutPaths.has(e.path);
   const dropEnabled = !!(e.is_dir && onDropInto);
@@ -167,10 +191,19 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
       onMouseEnter={() => scheduleRowWarm(onWarmContextMenu, e)}
       onMouseLeave={() => window.clearTimeout(hoverWarmTimer)}
       onMouseDown={(ev) => {
-        if (ev.button === 2) {
+        if (ev.button === 1) {
+          ev.preventDefault();
+        } else if (ev.button === 2) {
           window.clearTimeout(hoverWarmTimer);
           if (!selected.has(e.path)) onSelect(e.path, false);
           onWarmContextMenu?.(e, ev.shiftKey);
+        }
+      }}
+      onAuxClick={(ev) => {
+        if (ev.button === 1) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          onMiddleClick?.(e);
         }
       }}
       onClick={(ev) => {
@@ -181,17 +214,14 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
       onDoubleClick={() => onOpen(e)}
       draggable
       onDragStart={(ev) => setDragPayload(ev, e.path)}
-      onDragOver={
-        dropEnabled
-          ? (ev) => {
-              if (acceptsDrop(ev)) {
-                ev.preventDefault();
-                ev.dataTransfer.dropEffect = "move";
-                setDragOverPath(e.path);
-              }
-            }
-          : undefined
-      }
+      onDragEnd={clearGlobalDragPayload}
+      onDragOver={(ev) => {
+        if (acceptsDrop(ev)) {
+          ev.preventDefault();
+          ev.dataTransfer.dropEffect = "copy";
+          if (dropEnabled) setDragOverPath(e.path);
+        }
+      }}
       onDragLeave={() => setDragOverPath((p) => (p === e.path ? null : p))}
       onDrop={
         dropEnabled
@@ -200,7 +230,7 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
               ev.stopPropagation();
               setDragOverPath(null);
               const items = dropItems(ev);
-              if (items.length) onDropInto!(e.path, items);
+              if (items.length && !items.includes(e.path)) onDropInto!(e.path, items);
             }
           : undefined
       }
@@ -209,7 +239,7 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
         if (!selected.has(e.path)) onSelect(e.path, false);
         onContextMenu(ev, e);
       }}
-      style={{ gridTemplateColumns: ctx.colTemplate, minWidth: "100%", width: "max-content" }}
+      style={{ gridTemplateColumns: ctx.colTemplate, width: "max-content" }}
       className={`grid cursor-default items-center gap-3 rounded-[4px] px-3 ${
         compact ? "py-1" : "py-1.5"
       } min-h-[30px] text-[12.5px] transition-colors ${
@@ -217,14 +247,31 @@ const ListRow = memo(function ListRow({ e, ctx }: { e: FsEntry; ctx: RowCtx }) {
           ? "bg-[#383838] text-white ring-1 ring-inset ring-[#505050]"
           : "text-neutral-200 hover:bg-[#2a2a2a]"
       } ${e.is_hidden || isCut ? "opacity-55" : ""} ${
-        dragOverPath === e.path ? "bg-[#323232] ring-2 ring-[#0078d4]" : ""
+        dragOverPath === e.path ? "bg-[#333333]" : ""
       }`}
     >
       <span className="flex items-center gap-2.5 overflow-hidden min-w-0 py-0.5">
         <EntryIcon entry={e} size={Math.round(18 * Math.max(0.85, zoom))} className="shrink-0" />
         {rename(e) ?? (
           <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden leading-normal">
-            <span className="truncate min-w-0 text-[12.5px] text-neutral-200">{e.name}</span>
+            <span
+              className="truncate min-w-0 text-[12.5px] text-neutral-200 select-none cursor-default"
+              onClick={(ev) => {
+                if (isSel && selected.size === 1 && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && onStartRename) {
+                  const now = Date.now();
+                  const prev = lastClickTimeRef.current;
+                  lastClickTimeRef.current = now;
+                  if (now - prev > 450 && now - prev < 2500) {
+                    ev.stopPropagation();
+                    onStartRename(e.path);
+                  }
+                } else {
+                  lastClickTimeRef.current = Date.now();
+                }
+              }}
+            >
+              {displayNameOf(e.name)}
+            </span>
             {relFolder && (
               <span className="truncate text-[11px] text-neutral-400/80 font-normal shrink-0">
                 in {relFolder}
@@ -249,6 +296,7 @@ const GridTile = memo(function GridTile({ e, ctx }: { e: FsEntry; ctx: RowCtx })
     onSelect,
     onShiftSelect,
     onOpen,
+    onMiddleClick,
     onContextMenu,
     onWarmContextMenu,
     setDragPayload,
@@ -257,7 +305,9 @@ const GridTile = memo(function GridTile({ e, ctx }: { e: FsEntry; ctx: RowCtx })
     onDropInto,
     setDragOverPath,
     rename,
+    onStartRename,
   } = ctx;
+  const lastClickTimeRef = useRef(0);
   const isSel = selected.has(e.path);
   const isCut = cutPaths.has(e.path);
   const dropEnabled = !!(e.is_dir && onDropInto);
@@ -269,10 +319,19 @@ const GridTile = memo(function GridTile({ e, ctx }: { e: FsEntry; ctx: RowCtx })
       onMouseEnter={() => scheduleRowWarm(onWarmContextMenu, e)}
       onMouseLeave={() => window.clearTimeout(hoverWarmTimer)}
       onMouseDown={(ev) => {
-        if (ev.button === 2) {
+        if (ev.button === 1) {
+          ev.preventDefault();
+        } else if (ev.button === 2) {
           window.clearTimeout(hoverWarmTimer);
           if (!selected.has(e.path)) onSelect(e.path, false);
           onWarmContextMenu?.(e, ev.shiftKey);
+        }
+      }}
+      onAuxClick={(ev) => {
+        if (ev.button === 1) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          onMiddleClick?.(e);
         }
       }}
       onClick={(ev) => {
@@ -283,17 +342,14 @@ const GridTile = memo(function GridTile({ e, ctx }: { e: FsEntry; ctx: RowCtx })
       onDoubleClick={() => onOpen(e)}
       draggable
       onDragStart={(ev) => setDragPayload(ev, e.path)}
-      onDragOver={
-        dropEnabled
-          ? (ev) => {
-              if (acceptsDrop(ev)) {
-                ev.preventDefault();
-                ev.dataTransfer.dropEffect = "move";
-                setDragOverPath(e.path);
-              }
-            }
-          : undefined
-      }
+      onDragEnd={clearGlobalDragPayload}
+      onDragOver={(ev) => {
+        if (acceptsDrop(ev)) {
+          ev.preventDefault();
+          ev.dataTransfer.dropEffect = "copy";
+          if (dropEnabled) setDragOverPath(e.path);
+        }
+      }}
       onDragLeave={() => setDragOverPath((p) => (p === e.path ? null : p))}
       onDrop={
         dropEnabled
@@ -302,7 +358,7 @@ const GridTile = memo(function GridTile({ e, ctx }: { e: FsEntry; ctx: RowCtx })
               ev.stopPropagation();
               setDragOverPath(null);
               const items = dropItems(ev);
-              if (items.length) onDropInto!(e.path, items);
+              if (items.length && !items.includes(e.path)) onDropInto!(e.path, items);
             }
           : undefined
       }
@@ -314,7 +370,7 @@ const GridTile = memo(function GridTile({ e, ctx }: { e: FsEntry; ctx: RowCtx })
       className={`flex cursor-default flex-col items-center gap-1 rounded-[5px] px-2 py-2 transition-colors ${
         isSel ? "bg-[#383838] ring-1 ring-inset ring-[#505050]" : "hover:bg-[#2a2a2a]"
       } ${e.is_hidden || isCut ? "opacity-55" : ""} ${
-        dragOverPath === e.path ? "bg-[#323232] ring-2 ring-[#0078d4]" : ""
+        dragOverPath === e.path ? "bg-[#333333]" : ""
       }`}
     >
       <div
@@ -330,12 +386,25 @@ const GridTile = memo(function GridTile({ e, ctx }: { e: FsEntry; ctx: RowCtx })
       {rename(e) ?? (
         <div className="flex flex-col items-center w-full min-w-0 px-0.5">
           <span
-            className="line-clamp-2 w-full break-words text-center leading-[1.35] py-0.5 text-neutral-200"
+            className="line-clamp-2 w-full break-words text-center leading-[1.35] py-0.5 text-neutral-200 select-none cursor-default"
             style={{ fontSize: Math.round(12 * Math.min(1.4, Math.max(0.9, zoom))) }}
-            data-tooltip={e.name}
+            data-tooltip={displayNameOf(e.name)}
             data-tooltip-truncated="true"
+            onClick={(ev) => {
+              if (isSel && selected.size === 1 && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && onStartRename) {
+                const now = Date.now();
+                const prev = lastClickTimeRef.current;
+                lastClickTimeRef.current = now;
+                if (now - prev > 450 && now - prev < 2500) {
+                  ev.stopPropagation();
+                  onStartRename(e.path);
+                }
+              } else {
+                lastClickTimeRef.current = Date.now();
+              }
+            }}
           >
-            {e.name}
+            {displayNameOf(e.name)}
           </span>
           {relFolder && (
             <span
@@ -423,11 +492,13 @@ export default function FileView({
   sortDir = 1,
   onSort,
   onOpen,
+  onMiddleClick,
   onContextMenu,
   onWarmContextMenu,
   renamingPath = null,
   onRenameConfirm,
   onRenameCancel,
+  onStartRename,
   onDropInto,
 }: Props) {
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
@@ -440,37 +511,46 @@ export default function FileView({
   const setDragPayload = useCallback(
     async (ev: React.DragEvent, path: string) => {
       ev.preventDefault();
+      let currentSelected = selected;
       if (!selected.has(path)) {
         onSelect(path, false);
+        currentSelected = new Set([path]);
       }
-      const items = selected.has(path) ? [...selected] : [path];
+      const items = currentSelected.has(path) ? [...currentSelected] : [path];
+      window.__XPLORER_DRAGGED_FILES__ = items;
+
+      const dragImage = await generateDragImage(
+        items,
+        async (p) => {
+          const ent = entries.find((x) => x.path === p);
+          if (ent) return resolveEntryIconUrl(ent);
+          return getCachedIconUrl(p, !p.split(/[\\/]/).pop()?.includes("."));
+        },
+        (p) => {
+          const ent = entries.find((x) => x.path === p);
+          return !!ent?.is_shortcut || p.toLowerCase().endsWith(".lnk");
+        },
+      );
 
       try {
-        let iconPath = "";
-        try {
-          const entry = entries.find((x) => x.path === path);
-          const name = path.split(/[\\/]/).pop() ?? "";
-          const dot = name.lastIndexOf(".");
-          const ext = entry?.is_dir || dot <= 0 ? "" : name.slice(dot + 1).toLowerCase();
-          const res = await api.getEntryIconsBatch([
-            { key: "drag", path, isDir: !!entry?.is_dir, ext, size: 48, preview: false },
-          ]);
-          if (res[0]?.url) iconPath = res[0].url;
-        } catch {}
-        if (!iconPath) iconPath = cachedDragIconPath || (await api.getDragIconPath());
         await startDrag(
           {
             item: items,
-            icon: iconPath,
+            icon: dragImage || cachedDragIconPath,
+            mode: "copy",
           },
-          (payload) => {
+          async (payload) => {
+            clearGlobalDragPayload();
             if (payload && payload.result === "Dropped") {
               try {
-                const scale = window.devicePixelRatio || 1;
-                const screenCssX = Number(payload.cursorPos.x) / scale;
-                const screenCssY = Number(payload.cursorPos.y) / scale;
-                const clientX = screenCssX - (window.screenLeft ?? window.screenX);
-                const clientY = screenCssY - (window.screenTop ?? window.screenY);
+                const win = getCurrentWindow();
+                const [innerPos, scale] = await Promise.all([
+                  win.innerPosition(),
+                  win.scaleFactor(),
+                ]);
+                const clientX = (Number(payload.cursorPos.x) - innerPos.x) / scale;
+                const clientY = (Number(payload.cursorPos.y) - innerPos.y) / scale;
+
                 if (
                   clientX >= 0 &&
                   clientX <= window.innerWidth &&
@@ -478,46 +558,50 @@ export default function FileView({
                   clientY <= window.innerHeight
                 ) {
                   const el = document.elementFromPoint(clientX, clientY);
-                  const dropPath = el?.closest("[data-drop-path]")?.getAttribute("data-drop-path");
+                  const dropPath =
+                    el?.closest("[data-drop-path]")?.getAttribute("data-drop-path") ||
+                    (el?.closest("[data-fileview-container]") ? currentPath : null);
+
                   if (dropPath && onDropInto && !items.includes(dropPath)) {
-                    onDropInto(dropPath, items);
+                    const normTarget = dropPath.replace(/[\\/]+$/, "").toLowerCase();
+                    const itemsToMove = items.filter((p) => {
+                      const normP = p.replace(/[\\/]+$/, "").toLowerCase();
+                      if (normP === normTarget) return false;
+                      const parent = normP.replace(/[\\/][^\\/]+$/, "");
+                      return parent !== normTarget;
+                    });
+                    if (itemsToMove.length) {
+                      onDropInto(dropPath, itemsToMove);
+                    }
                   }
                 }
               } catch (err) {
-                console.error("Native drop target calculation error:", err);
+                console.error("Native drop calculation error:", err);
               }
             }
           },
         );
       } catch (err) {
-        console.error("Native drag failed:", err);
+        console.error("Native drag error:", err);
       }
     },
-    [selected, onSelect, onDropInto, entries],
+    [selected, onSelect, entries, onDropInto, currentPath],
   );
 
   const acceptsDrop = useCallback(
-    (ev: React.DragEvent) =>
-      Array.from(ev.dataTransfer.types).includes("application/x-file-paths") ||
-      Array.from(ev.dataTransfer.types).includes("Files"),
+    (ev: React.DragEvent) => acceptsFileDrop(ev),
     [],
   );
 
   const dropItems = useCallback((ev: React.DragEvent): string[] => {
-    try {
-      const raw = ev.dataTransfer.getData("application/x-file-paths");
-      const arr = JSON.parse(raw) as string[];
-      return Array.isArray(arr) ? arr : [];
-    } catch {
-      return [];
-    }
+    return extractDropItems(ev);
   }, []);
 
   const listRename = useCallback(
     (e: FsEntry) =>
       renamingPath === e.path ? (
         <InlineRenameInput
-          initial={e.name}
+          initial={displayNameOf(e.name)}
           onConfirm={onRenameConfirm}
           onCancel={onRenameCancel}
           className="min-w-0 flex-1 rounded border border-[#0078d4] bg-[#1b1b1b] px-1 py-0 text-[12.5px] text-white outline-none selection:bg-[#0078d4]"
@@ -529,7 +613,7 @@ export default function FileView({
     (e: FsEntry) =>
       renamingPath === e.path ? (
         <InlineRenameInput
-          initial={e.name}
+          initial={displayNameOf(e.name)}
           onConfirm={onRenameConfirm}
           onCancel={onRenameCancel}
           className="w-full rounded border border-[#0078d4] bg-[#1b1b1b] px-1 py-0 text-center leading-[1.25] text-white outline-none selection:bg-[#0078d4]"
@@ -593,6 +677,7 @@ export default function FileView({
       onSelect,
       onShiftSelect,
       onOpen,
+      onMiddleClick,
       onContextMenu,
       onWarmContextMenu,
       setDragPayload,
@@ -601,6 +686,7 @@ export default function FileView({
       onDropInto,
       setDragOverPath,
       rename: listRename,
+      onStartRename,
     }),
     [
       zoom,
@@ -612,6 +698,7 @@ export default function FileView({
       onSelect,
       onShiftSelect,
       onOpen,
+      onMiddleClick,
       onContextMenu,
       onWarmContextMenu,
       setDragPayload,
@@ -619,6 +706,7 @@ export default function FileView({
       dropItems,
       onDropInto,
       listRename,
+      onStartRename,
     ],
   );
 
@@ -788,12 +876,14 @@ export default function FileView({
     className,
   }: {
     initial: string;
-    onConfirm: (name: string) => void;
+    onConfirm: (name: string, tabDirection?: -1 | 1) => void;
     onCancel: () => void;
     className?: string;
   }) {
     const ref = useRef<HTMLInputElement>(null);
     const [value, setValue] = useState(initial);
+    const f2CycleRef = useRef(0);
+
     useEffect(() => {
       const el = ref.current;
       if (!el) return;
@@ -801,7 +891,9 @@ export default function FileView({
       const dot = initial.lastIndexOf(".");
       const stem = dot > 0 ? initial.slice(0, dot) : initial;
       el.setSelectionRange(0, stem.length);
-    }, []);
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, [initial]);
+
     return (
       <input
         ref={ref}
@@ -809,11 +901,32 @@ export default function FileView({
         onChange={(ev) => setValue(ev.target.value)}
         onKeyDown={(ev) => {
           ev.stopPropagation();
-          if (ev.key === "Enter") onConfirm(value.trim());
-          else if (ev.key === "Escape") onCancel();
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            onConfirm(value.trim() || initial);
+          } else if (ev.key === "Escape") {
+            ev.preventDefault();
+            onCancel();
+          } else if (ev.key === "Tab") {
+            ev.preventDefault();
+            onConfirm(value.trim() || initial, ev.shiftKey ? -1 : 1);
+          } else if (ev.key === "F2") {
+            ev.preventDefault();
+            const el = ref.current;
+            if (!el) return;
+            const dot = value.lastIndexOf(".");
+            f2CycleRef.current = (f2CycleRef.current + 1) % 3;
+            if (dot > 0 && f2CycleRef.current === 1) {
+              el.setSelectionRange(dot + 1, value.length);
+            } else if (f2CycleRef.current === 2 || dot <= 0) {
+              el.setSelectionRange(0, value.length);
+            } else {
+              el.setSelectionRange(0, dot > 0 ? dot : value.length);
+            }
+          }
         }}
         onMouseDown={(ev) => ev.stopPropagation()}
-        onBlur={() => onCancel()}
+        onBlur={() => onConfirm(value.trim() || initial)}
         autoFocus
         className={className}
         onClick={(ev) => ev.stopPropagation()}
@@ -857,6 +970,8 @@ export default function FileView({
   return (
     <div
       ref={scrollRef}
+      data-fileview-container
+      data-drop-path={currentPath}
       className={`relative flex-1 overflow-auto bg-[#191919] px-3 pb-4 ${
         marquee ? "select-none" : ""
       }`}
@@ -867,6 +982,36 @@ export default function FileView({
       }}
       onMouseDown={beginMarquee}
       onContextMenu={(e) => onContextMenu(e, null)}
+      onDragOver={(ev) => {
+        if (!currentPath || !onDropInto) return;
+        if (acceptsDrop(ev)) {
+          ev.preventDefault();
+          ev.dataTransfer.dropEffect = "copy";
+        }
+      }}
+      onDrop={(ev) => {
+        if (!currentPath || !onDropInto) return;
+        const targetRow = (ev.target as HTMLElement).closest("[data-drop-path]");
+        if (targetRow) return;
+
+        ev.preventDefault();
+        ev.stopPropagation();
+        setDragOverPath(null);
+        const items = dropItems(ev);
+        if (!items.length) return;
+
+        const normTarget = currentPath.replace(/[\\/]+$/, "").toLowerCase();
+        const itemsToMove = items.filter((p) => {
+          const normP = p.replace(/[\\/]+$/, "").toLowerCase();
+          if (normP === normTarget) return false;
+          const parent = normP.replace(/[\\/][^\\/]+$/, "");
+          return parent !== normTarget;
+        });
+
+        if (itemsToMove.length) {
+          onDropInto(currentPath, itemsToMove);
+        }
+      }}
     >
       {marquee && marqueeRef.current?.moved && (
         <div
@@ -884,8 +1029,8 @@ export default function FileView({
         <>
           <div
             ref={headerRef}
-            className="sticky top-0 z-10 grid w-fit gap-3 border-b border-[#2e2e2e] bg-[#191919] px-3 py-1.5 text-[12px] text-neutral-400"
-            style={{ gridTemplateColumns: colTemplate, minWidth: "100%" }}
+            className="sticky top-0 z-10 grid gap-3 border-b border-[#2e2e2e] bg-[#191919] px-3 py-1.5 text-[12px] text-neutral-400"
+            style={{ gridTemplateColumns: colTemplate, width: "max-content" }}
           >
             <button
               type="button"

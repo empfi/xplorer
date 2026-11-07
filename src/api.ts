@@ -259,6 +259,12 @@ export const api = {
   isDefaultFileManager: () => invoke<boolean>("is_default_file_manager"),
   setAsDefaultFileManager: () => invoke<void>("set_as_default_file_manager"),
   unsetAsDefaultFileManager: () => invoke<void>("unset_as_default_file_manager"),
+  isAutostartEnabled: () => invoke<boolean>("is_autostart_enabled"),
+  setAutostartEnabled: (enabled: boolean) =>
+    invoke<void>("set_autostart_enabled", { enabled }),
+  isBackgroundResidentEnabled: () => invoke<boolean>("is_background_resident_enabled"),
+  setBackgroundResidentEnabled: (enabled: boolean) =>
+    invoke<void>("set_background_resident_enabled", { enabled }),
   isWinEInterceptionEnabled: () => invoke<boolean>("is_win_e_interception_enabled"),
   setWinEInterceptionEnabled: (enabled: boolean) =>
     invoke<void>("set_win_e_interception_enabled", { enabled }),

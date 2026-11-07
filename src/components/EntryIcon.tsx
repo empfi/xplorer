@@ -78,6 +78,57 @@ interface IconRequest {
 const cache = new Map<string, string>();
 const resolveListeners = new Map<string, Set<(u: string | null) => void>>();
 
+export function getCachedIconUrl(path: string, isDir: boolean, name?: string): string | undefined {
+  const fileName = name || path.split(/[\\/]/).pop() || "";
+  const ext = isDir ? "" : (fileName.split(".").pop() ?? "").toLowerCase().replace(/^\./, "");
+  const perFile = isDir ? false : isMediaExt(ext) || SHORTCUT_EXTS.includes(ext);
+
+  for (const s of [64, 48, 32, 24, 20, 18, 16]) {
+    if (isDir) {
+      for (const k of [`d:${s}:${path}`, `d:${s}:folder`]) {
+        const v = cache.get(k);
+        if (v) return v;
+      }
+    } else if (perFile) {
+      for (const k of [`t:${s}:true:${path}`, `t:${s}:false:${path}`]) {
+        const v = cache.get(k);
+        if (v) return v;
+      }
+    } else {
+      const v = cache.get(`e:${s}:${ext}`);
+      if (v) return v;
+    }
+  }
+
+  for (const [k, v] of cache.entries()) {
+    if (isDir) {
+      if (k.startsWith("d:") && (k.endsWith(`:${path}`) || k.endsWith(":folder"))) return v;
+    } else if (perFile) {
+      if (k.startsWith("t:") && k.includes(`:${path}`)) return v;
+    } else {
+      if (k.startsWith("e:") && k.endsWith(`:${ext}`)) return v;
+    }
+  }
+  return undefined;
+}
+
+export async function resolveEntryIconUrl(entry: FsEntry): Promise<string | undefined> {
+  const cached = getCachedIconUrl(entry.path, entry.is_dir, entry.name);
+  if (cached) return cached;
+
+  const ext = entry.is_dir ? "" : (entry.name.split(".").pop() ?? "").toLowerCase().replace(/^\./, "");
+  try {
+    const res = await api.getEntryIconsBatch([
+      { key: "drag", path: entry.path, isDir: entry.is_dir, ext, size: 48, preview: true },
+    ]);
+    if (res[0]?.url) {
+      cache.set(entry.is_dir ? `d:48:${entry.path}` : `t:48:true:${entry.path}`, res[0].url);
+      return res[0].url;
+    }
+  } catch {}
+  return undefined;
+}
+
 // Queue flushed once per microtask-frame: N EntryIcons mounting together
 // become ONE IPC call instead of N round-trips.
 let queue = new Map<string, IconRequest>();
@@ -144,6 +195,76 @@ function subscribe(key: string, req: IconRequest, fn: (u: string | null) => void
   return () => {
     subs!.delete(fn);
   };
+}
+
+function ShortcutBadge({ size }: { size: number }) {
+  const badgeSize = Math.max(9, Math.round(size * 0.44));
+  return (
+    <div
+      style={{
+        width: badgeSize,
+        height: badgeSize,
+        bottom: -1,
+        left: -1,
+      }}
+      className="absolute pointer-events-none flex items-center justify-center rounded-[2px] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.6)] border border-black/30"
+    >
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        className="w-[85%] h-[85%]"
+      >
+        <path
+          d="M11.5 3H7L9 5L5.5 8.5C4 10 3 11.5 3 12.5C4.2 11 6 10.2 7.5 9.2L11 5.7L13 7.7V3H11.5Z"
+          fill="#0078d4"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function AdminShieldBadge({ size }: { size: number }) {
+  const badgeSize = Math.max(10, Math.round(size * 0.46));
+  return (
+    <div
+      style={{
+        width: badgeSize,
+        height: badgeSize,
+        bottom: -1,
+        right: -1,
+      }}
+      className="absolute pointer-events-none flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]"
+    >
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        className="w-full h-full"
+      >
+        <path
+          d="M8 1L2 3.5V8C2 11.5 4.5 14.5 8 15.5C11.5 14.5 14 11.5 14 8V3.5L8 1Z"
+          fill="#1b1b1b"
+          stroke="#ffffff"
+          strokeWidth="0.8"
+        />
+        <path
+          d="M8 2.2L3.2 4.2V8C3.2 8.5 3.3 9 3.5 9.5H8V2.2Z"
+          fill="#ffb900"
+        />
+        <path
+          d="M8 2.2V9.5H12.5C12.7 9 12.8 8.5 12.8 8V4.2L8 2.2Z"
+          fill="#0078d4"
+        />
+        <path
+          d="M8 9.5H3.5C4.3 11.5 6 13.2 8 14.2V9.5Z"
+          fill="#0078d4"
+        />
+        <path
+          d="M8 9.5V14.2C10 13.2 11.7 11.5 12.5 9.5H8Z"
+          fill="#ffb900"
+        />
+      </svg>
+    </div>
+  );
 }
 
 export default function EntryIcon({
@@ -231,19 +352,39 @@ export default function EntryIcon({
     return unsub;
   }, [key, perFile, extL, entry.path, entry.is_dir]);
 
+  const isShortcut =
+    entry.is_shortcut ||
+    (!entry.is_dir && (extL === "lnk" || extL === "url" || extL === "appref-ms"));
+  const isAdmin = Boolean(entry.is_admin);
+
   if (!url) {
     const Fallback = iconFor(entry);
-    return <Fallback size={size} className={className} />;
+    return (
+      <div
+        className={`relative inline-flex items-center justify-center shrink-0 ${className || ""}`}
+        style={{ width: size, height: size }}
+      >
+        <Fallback size={size} />
+        {isShortcut && <ShortcutBadge size={size} />}
+        {isAdmin && <AdminShieldBadge size={size} />}
+      </div>
+    );
   }
   return (
-    <img
-      src={url}
-      width={size}
-      height={size}
-      draggable={false}
-      alt=""
-      className={className}
-      style={{ objectFit: "contain", maxWidth: size, maxHeight: size, flexShrink: 0 }}
-    />
+    <div
+      className={`relative inline-flex items-center justify-center shrink-0 ${className || ""}`}
+      style={{ width: size, height: size }}
+    >
+      <img
+        src={url}
+        width={size}
+        height={size}
+        draggable={false}
+        alt=""
+        style={{ objectFit: "contain", maxWidth: size, maxHeight: size }}
+      />
+      {isShortcut && <ShortcutBadge size={size} />}
+      {isAdmin && <AdminShieldBadge size={size} />}
+    </div>
   );
 }
